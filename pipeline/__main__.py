@@ -50,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    for noisy in ("httpx", "httpx2", "huggingface_hub", "datasets", "filelock", "fsspec"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     load_env()
     config = load_config()
 

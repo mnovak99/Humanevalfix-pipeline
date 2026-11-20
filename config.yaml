@@ -5,6 +5,16 @@ languages: [en, cs]
 runs_per_prompt: 3
 exec_timeout_s: 10
 translations_path: data/translations.xlsx
+exec_workers: 4       # parallel test executions
+# Pre-filled EN instruction in the translations template ({entry_point} is substituted in s02).
+# Same wording as the original HumanEvalFix setup (bigcode-evaluation-harness).
+instruction_template_en: "Fix bugs in {entry_point}."
+
+dataset:
+  name: bigcode/humanevalpack
+  config: python
+  split: test
+  revision: 9a41762f73a8cb23bb5811b73d5aab164efcf378   # pinned HF commit (2025-08-19)
 
 models:
   - name: claude-haiku-5-5

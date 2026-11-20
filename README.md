@@ -46,14 +46,64 @@ All tunables live in `config.yaml`; API keys in `.env`.
 | 05 execute | `outputs/extracted.jsonl` | `outputs/executions.jsonl` |
 | 06 aggregate | all of the above | `outputs/results.csv` |
 
-## Dataset fields used
+## Dataset
 
-_To be documented in Phase 1 after inspecting the dataset._
+`bigcode/humanevalpack`, config `python`, split `test` (164 tasks), pinned to HF
+commit `9a41762f` in `config.yaml`.
+
+Fields used:
+
+| Field | Use |
+|-------|-----|
+| `task_id` | task key (`Python/N`) |
+| `prompt` | imports + (helper functions) + entry-point signature and docstring |
+| `buggy_solution` | buggy body; code shown to the model = `prompt + buggy_solution` |
+| `canonical_solution` | sanity check only (`prompt + canonical_solution` must pass) |
+| `test` | test harness; defines `check(f)` and already ends with `check(<entry_point>)` |
+| `entry_point` | function to fix / extract |
+| `bug_type` | sampling strata |
+
+Not used: `instruction` (a synthesis instruction, "Write a Python function …",
+that embeds the whole English docstring), `docstring`, `declaration`,
+`example_test`, `signature`, `failure_symptoms`, `import` and `test_setup`
+(the last two are empty for all Python tasks).
+
+Program executed for a test = `preamble + code + test`, where `preamble` is the
+prompt without the entry-point function (imports and helper functions).
+
+### Step 01 results (seed 42)
+
+* Sanity check: 164/164 tasks valid (canonical passes, buggy does not), 0 excluded.
+  Buggy statuses: 155 `failed`, 6 `error`, 3 `timeout` (Python/10, 156, 160).
+* Stratified sample of 100 (proportional, largest remainder): excess logic 19,
+  function misuse 5, missing logic 20, operator misuse 15, value misuse 27,
+  variable misuse 14. The pilot is the first 20 of the same order and keeps the
+  ratios (4/1/4/3/5/3).
+
+### Docstring split
+
+The docstring is split into a translatable **description** and verbatim
+**examples**. Example lines are `>>>` sessions (with their expected output) and
+call-expression lines such as `f(x) ➞ y`, `f(x) == y`, `* f(x) => y`,
+`assert f(x) => y`, including multi-line calls. Each run of example lines is
+replaced in the description by a `{EXAMPLE_k}` marker line and re-inserted on
+rebuild, so examples are byte-identical across languages by construction.
+Indentation and the opening/closing quote layout are structural, not part of the
+description. Rebuilding with the English description reproduces the original
+code exactly (asserted for every task, including after an `.xlsx` round-trip).
+
+Data written in prose (`Input: [4,2,3]` / `Output: [2, 1]`,
+`For num = "AB" the output should be 1.`) and comments between examples are
+part of the description: translators translate the words and copy the values.
+
+Dataset quirk: in Python/115 the string literal comes after `import math`, so
+it is not a real docstring; it is still treated as the task description.
 
 ## Status
 
 - [x] Phase 0: setup, config, CLI skeleton
-- [ ] Phase 1: s01 + s05 (sampling, docstring split, executor, sanity check)
+- [x] Phase 1: s01 + s05 executor (sampling, docstring split, sanity check);
+      s05 step wiring follows in Phase 3 together with s04
 - [ ] Phase 2: mock translations + s02
 - [ ] Phase 3: s03 (fake provider) + s04 + s06
 - [ ] Phase 4: real providers

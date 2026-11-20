@@ -23,6 +23,7 @@ def test_mode_paths_are_separate(tmp_path: Path) -> None:
     assert len({c.responses_path for c in modes}) == 4
     assert len({c.results_path for c in modes}) == 4
     assert RunContext(cfg, pilot=True, root=tmp_path).tasks_path.name == "tasks_pilot.json"
+    assert RunContext(cfg, pilot=True, root=tmp_path).prompts_path.name == "prompts_pilot.jsonl"
     assert RunContext(cfg, root=tmp_path).n_tasks == cfg.n_tasks
 
 
@@ -43,4 +44,4 @@ def test_all_steps_importable() -> None:
     assert sorted(STEPS) == ["01", "02", "03", "04", "05", "06"]
     for module in STEPS.values():
         assert callable(importlib.import_module(module).run)
-    assert main(["run", "--step", "01", "--pilot"]) == 2  # stub until Phase 1
+    assert main(["run", "--step", "06", "--pilot", "--dry-run"]) == 2  # stub until Phase 3

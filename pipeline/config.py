@@ -37,7 +37,18 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class DatasetConfig:
+    name: str
+    config: str
+    split: str
+    revision: str | None
+
+
+@dataclass(frozen=True)
 class Config:
+    dataset: DatasetConfig
+    exec_workers: int
+    instruction_template_en: str
     seed: int
     n_tasks: int
     pilot_n_tasks: int
@@ -66,7 +77,16 @@ def _parse_model(raw: dict[str, Any]) -> ModelConfig:
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    ds = raw["dataset"]
     cfg = Config(
+        dataset=DatasetConfig(
+            name=str(ds["name"]),
+            config=str(ds["config"]),
+            split=str(ds["split"]),
+            revision=str(ds["revision"]) if ds.get("revision") else None,
+        ),
+        exec_workers=int(raw.get("exec_workers", 4)),
+        instruction_template_en=str(raw["instruction_template_en"]),
         seed=int(raw["seed"]),
         n_tasks=int(raw["n_tasks"]),
         pilot_n_tasks=int(raw["pilot_n_tasks"]),
@@ -138,7 +158,7 @@ class RunContext:
 
     @property
     def translations_template_path(self) -> Path:
-        return self.data_dir / f"translations_template{self._suffix(False)}.xlsx"
+        return self.data_dir / "translations_template.xlsx"
 
     @property
     def prompts_path(self) -> Path:
