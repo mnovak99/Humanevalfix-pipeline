@@ -23,6 +23,7 @@ from tqdm import tqdm
 from pipeline.config import Config, ModelConfig, RunContext
 from pipeline.io import append_jsonl, read_json, read_jsonl
 from pipeline.providers import NonRetryableError, Provider, RetryableError, get_live_provider
+from pipeline.providers.base import checked_params
 from pipeline.providers.fake import FakeProvider
 from pipeline.translations import is_mock_text
 
@@ -209,6 +210,13 @@ def run(ctx: RunContext) -> None:
         provider_for: Callable[[ModelConfig], Provider] = lambda _m: fake  # noqa: E731
     else:
         check_not_mock(prompts)
+        for m in models:
+            try:
+                checked_params(m)
+            except NonRetryableError as exc:
+                raise LiveRunRefused(str(exc)) from exc
+        # Build clients first: a missing key fails here, before the user confirms anything.
+        live = {m.name: get_live_provider(m) for m in models}
         costs = estimate_cost(jobs, cfg)
         tok = cfg.cost_estimate_tokens
         log.info("LIVE run, cost estimate (%d input / %d output tokens per call):", tok.input, tok.output)
@@ -217,7 +225,6 @@ def run(ctx: RunContext) -> None:
         log.info("  %-28s %5d calls  ~$%.2f", "TOTAL", len(jobs), sum(c for _, c in costs.values()))
         if not confirm("Proceed with paid API calls?", ctx.yes):
             raise LiveRunRefused("live run not confirmed")
-        live = {m.name: get_live_provider(m) for m in models}
         provider_for = lambda m: live[m.name]  # noqa: E731
 
     t0 = time.perf_counter()

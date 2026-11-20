@@ -115,12 +115,16 @@ def load_env() -> None:
     load_dotenv(ROOT / ".env", override=False)
 
 
+class MissingApiKey(RuntimeError):
+    pass
+
+
 def get_api_key(provider: str) -> str:
     """Return the key for a provider; never log the value."""
     var = API_KEY_ENV[provider]
     key = os.environ.get(var, "").strip()
     if not key:
-        raise RuntimeError(f"{var} is not set (see .env.example)")
+        raise MissingApiKey(f"{var} is not set (copy .env.example to .env and fill it in)")
     return key
 
 

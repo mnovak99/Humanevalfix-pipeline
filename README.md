@@ -154,6 +154,22 @@ timestamp` (UTC ISO), `attempts, status` (`ok`/`failed`), `error, text,
 model_reported, input_tokens, output_tokens, reasoning_tokens, latency_s,
 raw_meta`.
 
+### Providers
+
+| Provider | SDK / endpoint | `params` passthrough | `reasoning_tokens` from |
+|----------|----------------|----------------------|-------------------------|
+| anthropic | `anthropic` 2.x, `messages.create` | request fields, e.g. `output_config: {effort: low}` | `usage.output_tokens_details.thinking_tokens` |
+| openai | `openai` 3.x, `responses.create` (`store=False`) | request fields, e.g. `reasoning: {effort: low}` | `usage.output_tokens_details.reasoning_tokens` |
+| gemini | `google-genai`, `models.generate_content` | `GenerateContentConfig` fields | `usage_metadata.thoughts_token_count` |
+
+The prompt is sent as a single user message; no system prompt. SDK built-in
+retries are disabled (`max_retries=0`) so s03 owns the retry policy. Retryable:
+connection errors/timeouts and HTTP 408/409/429/5xx/529; everything else is a
+failed record. `output_tokens` includes thinking/reasoning tokens. Model-side
+metadata (stop reason / status, refusal details, request id) goes to `raw_meta`.
+Claude Haiku 5.5 runs adaptive thinking by default with effort `medium` when
+`params` is empty.
+
 ## Extraction (step 04)
 
 Code = last ` ```python ` (or `py`) block, else the last fenced block of any
@@ -190,4 +206,5 @@ it is not a real docstring; it is still treated as the task description.
       s05 step wiring follows in Phase 3 together with s04
 - [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
 - [x] Phase 3: s03 (fake provider) + s04 + s05 wiring + s06; `--all --pilot --dry-run` works end-to-end
-- [ ] Phase 4: real providers
+- [~] Phase 4: real providers implemented; offline tests written but not yet run on
+      this machine (Windows Application Control blocks `pydantic_core`); no paid calls made

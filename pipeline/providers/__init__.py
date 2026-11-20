@@ -9,4 +9,17 @@ __all__ = ["NonRetryableError", "Provider", "Response", "RetryableError", "get_l
 
 
 def get_live_provider(model_cfg: ModelConfig) -> Provider:
-    raise NotImplementedError(f"provider {model_cfg.provider!r} is implemented in Phase 4")
+    """Real provider for a model; SDKs are imported lazily so dry runs never need them."""
+    if model_cfg.provider == "anthropic":
+        from pipeline.providers.anthropic_provider import AnthropicProvider
+
+        return AnthropicProvider()
+    if model_cfg.provider == "openai":
+        from pipeline.providers.openai_provider import OpenAIProvider
+
+        return OpenAIProvider()
+    if model_cfg.provider == "gemini":
+        from pipeline.providers.gemini_provider import GeminiProvider
+
+        return GeminiProvider()
+    raise ValueError(f"unknown provider {model_cfg.provider!r} for model {model_cfg.name!r}")
