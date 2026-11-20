@@ -11,10 +11,11 @@ from collections.abc import Callable
 from pipeline.config import RunContext, load_config, load_env
 from pipeline.docstrings import DocstringError
 from pipeline.s02_build_prompts import InvariantError
+from pipeline.s03_run_models import LiveRunRefused
 from pipeline.translations import TranslationError
 
 # Expected, user-facing failures: report the message, no traceback.
-PipelineError = (TranslationError, DocstringError, InvariantError, FileNotFoundError)
+PipelineError = (TranslationError, DocstringError, InvariantError, LiveRunRefused, FileNotFoundError)
 
 STEPS: dict[str, str] = {
     "01": "pipeline.s01_prepare",

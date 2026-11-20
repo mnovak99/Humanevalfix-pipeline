@@ -6,6 +6,10 @@ runs_per_prompt: 3
 exec_timeout_s: 10
 translations_path: data/translations.xlsx
 exec_workers: 4       # parallel test executions
+api_workers: 4        # parallel model calls
+retry_max_attempts: 6
+# Per-call token assumption for the pre-run cost estimate.
+cost_estimate_tokens: {input: 600, output: 2000}
 # Pre-filled EN instruction in the translations template ({entry_point} is substituted in s02).
 # Same wording as the original HumanEvalFix setup (bigcode-evaluation-harness).
 instruction_template_en: "Fix bugs in {entry_point}."

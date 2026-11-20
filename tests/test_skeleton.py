@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.__main__ import STEPS, build_parser, main
+from pipeline.__main__ import STEPS, build_parser
 from pipeline.config import RunContext, load_config
 
 
@@ -44,4 +44,3 @@ def test_all_steps_importable() -> None:
     assert sorted(STEPS) == ["01", "02", "03", "04", "05", "06"]
     for module in STEPS.values():
         assert callable(importlib.import_module(module).run)
-    assert main(["run", "--step", "06", "--pilot", "--dry-run"]) == 2  # stub until Phase 3

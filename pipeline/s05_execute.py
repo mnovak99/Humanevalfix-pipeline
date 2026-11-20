@@ -16,8 +16,13 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+
+from tqdm import tqdm
+
 from pipeline.config import RunContext
-from pipeline.io import write_text
+from pipeline.io import read_json, read_jsonl, write_jsonl, write_text
 
 log = logging.getLogger(__name__)
 
@@ -114,5 +119,32 @@ def _tail(err_b: bytes | None) -> str:
     return text[-STDERR_TAIL_CHARS:]
 
 
+def skipped() -> ExecResult:
+    return ExecResult(SKIPPED, None, None, 0.0, "")
+
+
 def run(ctx: RunContext) -> None:
-    raise NotImplementedError("s05 step wiring (extracted.jsonl -> executions.jsonl) comes in Phase 3")
+    from pipeline.s04_extract import USABLE
+
+    if not ctx.extracted_path.exists():
+        raise FileNotFoundError(f"{ctx.extracted_path} not found; run step 04 first")
+    cfg = ctx.config
+    tasks = {t["task_id"]: t for t in read_json(ctx.tasks_path)["tasks"]}
+    records = read_jsonl(ctx.extracted_path)
+
+    def work(rec: dict) -> dict:
+        if rec["extraction_status"] in USABLE:
+            task = tasks[rec["task_id"]]
+            # Preamble first so the model's own imports/helpers (if any) take precedence.
+            program = build_program(rec["code"], task["test"], preamble=task["preamble"])
+            result = execute_program(program, cfg.exec_timeout_s, ctx.tmp_dir)
+        else:
+            result = skipped()
+        keys = {k: rec[k] for k in ("prompt_id", "task_id", "language", "model", "run")}
+        return {**keys, "exec_status": result.status, **{k: v for k, v in result.to_dict().items() if k != "status"}}
+
+    with ThreadPoolExecutor(max_workers=cfg.exec_workers) as pool:
+        out = list(tqdm(pool.map(work, records), total=len(records), desc="executing"))
+    write_jsonl(ctx.executions_path, out)
+    counts = Counter(r["exec_status"] for r in out)
+    log.info("executed %d records -> %s: %s", len(out), ctx.executions_path, dict(sorted(counts.items())))

@@ -48,6 +48,9 @@ class DatasetConfig:
 class Config:
     dataset: DatasetConfig
     exec_workers: int
+    api_workers: int
+    retry_max_attempts: int
+    cost_estimate_tokens: Price  # assumed tokens per call (input, output)
     instruction_template_en: str
     seed: int
     n_tasks: int
@@ -86,6 +89,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
             revision=str(ds["revision"]) if ds.get("revision") else None,
         ),
         exec_workers=int(raw.get("exec_workers", 4)),
+        api_workers=int(raw.get("api_workers", 4)),
+        retry_max_attempts=int(raw.get("retry_max_attempts", 6)),
+        cost_estimate_tokens=Price(
+            float(raw["cost_estimate_tokens"]["input"]), float(raw["cost_estimate_tokens"]["output"])
+        ),
         instruction_template_en=str(raw["instruction_template_en"]),
         seed=int(raw["seed"]),
         n_tasks=int(raw["n_tasks"]),

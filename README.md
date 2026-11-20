@@ -128,6 +128,58 @@ violation stops the step.
 `data/prompts.jsonl` fields: `prompt_id` (`<task_id>::<lang>`), `task_id`,
 `language`, `prompt`, `entry_point`, `mock_translation`.
 
+## Model calls (step 03)
+
+Every prompt × enabled model × run (1..`runs_per_prompt`) is one call; each
+result is appended to `outputs/responses*.jsonl` immediately. **Resume:** calls
+with a successful record are skipped; failed calls are retried on the next run
+(the latest record per `(prompt_id, model, run)` wins downstream). Retries use
+exponential backoff with jitter for transient errors (429/5xx/network), up to
+`retry_max_attempts`; other errors become a `failed` record and the run goes on.
+No `temperature`/`top_p`/`top_k` is ever sent; `params` from `config.yaml` are
+passed through.
+
+A live (non-dry) run refuses prompts built from mock translations, then prints
+the number of calls and the estimated cost (`cost_estimate_tokens` per call ×
+`price_per_mtok`) and asks for confirmation unless `--yes`.
+
+`--dry-run` uses a deterministic fake provider (hash of model + prompt) that
+returns, in fixed proportions: the canonical solution in a ` ```python ` block,
+the buggy code unchanged, the canonical code without a fence, a syntax error, a
+wrong function name, an empty response, or a simulated API error — so every
+downstream status is exercised.
+
+Response record: `prompt_id, task_id, language, model, provider, run,
+timestamp` (UTC ISO), `attempts, status` (`ok`/`failed`), `error, text,
+model_reported, input_tokens, output_tokens, reasoning_tokens, latency_s,
+raw_meta`.
+
+## Extraction (step 04)
+
+Code = last ` ```python ` (or `py`) block, else the last fenced block of any
+kind, else the whole text; an unclosed final fence (truncated output) counts as
+a block. The code must `ast.parse` and define a top-level function named
+`entry_point`. Statuses: `ok`, `no_code_block` (whole text used and it parsed),
+`syntax_error`, `function_missing`, `empty_response`, and `api_error` (the call
+itself failed). Usable for execution: `ok`, `no_code_block`.
+
+## Execution (step 05)
+
+Program = `preamble` (the prompt's imports and helper functions) + extracted
+code (so the model's own definitions win) + dataset `test`. Each runs in a
+fresh `python -I -X utf8` subprocess with `exec_timeout_s`; on timeout the
+whole process tree is killed (`taskkill /T` on Windows). Statuses: `passed`,
+`failed` (AssertionError), `error` (other exception; type stored), `timeout`,
+`skipped` (no usable code). The last 500 characters of stderr are kept.
+
+## Results (step 06)
+
+`outputs/results*.csv`, one row per task × language × model × run:
+`task_id, bug_type, language, model, run, extraction_status, exec_status,
+passed, input_tokens, output_tokens, reasoning_tokens, latency_s`
+(`passed` is 1/0). The step prints pass rate per model × language and status
+counts; no statistics.
+
 Dataset quirk: in Python/115 the string literal comes after `import math`, so
 it is not a real docstring; it is still treated as the task description.
 
@@ -137,5 +189,5 @@ it is not a real docstring; it is still treated as the task description.
 - [x] Phase 1: s01 + s05 executor (sampling, docstring split, sanity check);
       s05 step wiring follows in Phase 3 together with s04
 - [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
-- [ ] Phase 3: s03 (fake provider) + s04 + s06
+- [x] Phase 3: s03 (fake provider) + s04 + s05 wiring + s06; `--all --pilot --dry-run` works end-to-end
 - [ ] Phase 4: real providers
