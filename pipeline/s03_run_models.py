@@ -221,8 +221,8 @@ def run(ctx: RunContext) -> None:
         tok = cfg.cost_estimate_tokens
         log.info("LIVE run, cost estimate (%d input / %d output tokens per call):", tok.input, tok.output)
         for name, (n, cost) in costs.items():
-            log.info("  %-28s %5d calls  ~$%.2f", name, n, cost)
-        log.info("  %-28s %5d calls  ~$%.2f", "TOTAL", len(jobs), sum(c for _, c in costs.values()))
+            log.info("  %-28s %5d calls  ~$%.4f", name, n, cost)
+        log.info("  %-28s %5d calls  ~$%.4f", "TOTAL", len(jobs), sum(c for _, c in costs.values()))
         if not confirm("Proceed with paid API calls?", ctx.yes):
             raise LiveRunRefused("live run not confirmed")
         provider_for = lambda m: live[m.name]  # noqa: E731
