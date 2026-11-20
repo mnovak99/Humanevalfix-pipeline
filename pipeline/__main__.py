@@ -9,6 +9,12 @@ import sys
 from collections.abc import Callable
 
 from pipeline.config import RunContext, load_config, load_env
+from pipeline.docstrings import DocstringError
+from pipeline.s02_build_prompts import InvariantError
+from pipeline.translations import TranslationError
+
+# Expected, user-facing failures: report the message, no traceback.
+PipelineError = (TranslationError, DocstringError, InvariantError, FileNotFoundError)
 
 STEPS: dict[str, str] = {
     "01": "pipeline.s01_prepare",
@@ -39,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--dry-run", action="store_true", help="fake provider, no API calls; writes *_dry files")
     run.add_argument("--yes", action="store_true", help="skip the cost confirmation for live runs")
 
-    sub.add_parser("mock-translations", help="create a mock data/translations.xlsx ([CS] + EN)")
+    mock = sub.add_parser("mock-translations", help="create a mock data/translations.xlsx ([CS] + EN)")
+    mock.add_argument("--force", action="store_true", help="overwrite a file that contains real translations")
     return parser
 
 
@@ -59,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "mock-translations":
             from pipeline import translations
 
-            translations.write_mock(RunContext(config=config))
+            translations.write_mock(RunContext(config=config), force=args.force)
             return 0
 
         ctx = RunContext(config=config, pilot=args.pilot, dry_run=args.dry_run, yes=args.yes)
@@ -70,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     except NotImplementedError as exc:
         log.error("%s", exc)
         return 2
+    except PipelineError as exc:
+        log.error("%s", exc)
+        return 1
     return 0
 
 

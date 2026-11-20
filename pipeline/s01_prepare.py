@@ -10,27 +10,15 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
 from tqdm import tqdm
 
 from pipeline.config import Config, RunContext
 from pipeline.docstrings import DocstringError, split_docstring
 from pipeline.io import write_json
 from pipeline.s05_execute import PASSED, build_program, execute_program
+from pipeline.translations import write_workbook
 
 log = logging.getLogger(__name__)
-
-DOCSTRING_COLUMNS = ["task_id", "docstring_en", "translated_by", "reviewed_by", "status", "note"]
-
-TRANSLATOR_GUIDE = [
-    "Translate docstring_en into docstring_<lang>; keep line breaks roughly as in English.",
-    "Lines {EXAMPLE_1}, {EXAMPLE_2}, ... are code examples inserted automatically: keep each on its own line, in the same order, unchanged.",
-    "Values inside prose (e.g. 'Input: [4,2,3]', 'For num = \"AB\" the output should be 1') must be copied exactly; translate only the words.",
-    "Do not translate identifiers (function/parameter names) and do not use triple quotes (\"\"\" or ''').",
-    "Status: todo -> translated -> reviewed. Only 'reviewed' rows can be used in a live run.",
-    "Sheet 'instructions': one row per language; keep the {entry_point} placeholder.",
-    "Rows are in sampling order: the first pilot_n_tasks rows form the pilot set.",
-]
 
 
 @dataclass(frozen=True)
@@ -141,29 +129,6 @@ def stratified_order(task_ids_by_stratum: dict[str, list[str]], n: int, seed: in
     return [tid for _, _, tid in sorted(keyed)]
 
 
-def write_translation_template(path: Path, tasks: list[dict], cfg: Config) -> None:
-    other = [lang for lang in cfg.languages if lang != "en"]
-    rows = []
-    for t in tasks:
-        row = {"task_id": t["task_id"], "docstring_en": t["docstring_parts"]["description"]}
-        row |= {f"docstring_{lang}": "" for lang in other}
-        row |= {"translated_by": "", "reviewed_by": "", "status": "todo", "note": ""}
-        rows.append(row)
-    columns = ["task_id", "docstring_en", *[f"docstring_{lang}" for lang in other], *DOCSTRING_COLUMNS[2:]]
-    instructions = [
-        {"language": lang, "instruction": cfg.instruction_template_en if lang == "en" else ""} for lang in cfg.languages
-    ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with pd.ExcelWriter(path, engine="openpyxl") as xw:
-        pd.DataFrame(rows, columns=columns).to_excel(xw, sheet_name="docstrings", index=False)
-        pd.DataFrame(instructions, columns=["language", "instruction"]).to_excel(xw, sheet_name="instructions", index=False)
-        pd.DataFrame({"guide": TRANSLATOR_GUIDE}).to_excel(xw, sheet_name="guide", index=False)
-        ws = xw.sheets["docstrings"]
-        for col, width in zip("ABCDEFGH", [12, 80, 80, 14, 14, 12, 30, 30]):
-            ws.column_dimensions[col].width = width
-        xw.sheets["guide"].column_dimensions["A"].width = 140
-
-
 def run(ctx: RunContext) -> None:
     cfg = ctx.config
     rows = load_dataset_rows(cfg)
@@ -210,6 +175,6 @@ def run(ctx: RunContext) -> None:
         # The pilot is the first pilot_n_tasks rows of the full template; one template avoids confusion.
         log.info("pilot run: translation template not written (use the full one)")
     else:
-        write_translation_template(ctx.translations_template_path, tasks, cfg)
+        write_workbook(ctx.translations_template_path, tasks, cfg)
         log.info("wrote translation template to %s", ctx.translations_template_path)
     log.info("sample by bug_type: %s", meta["strata_sample"])

@@ -96,6 +96,38 @@ Data written in prose (`Input: [4,2,3]` / `Output: [2, 1]`,
 `For num = "AB" the output should be 1.`) and comments between examples are
 part of the description: translators translate the words and copy the values.
 
+Helper functions in the prompt (Python/10, 32, 50 in the sample) keep their
+English docstrings in every language; they are treated as code.
+
+## Translations and prompts (step 02)
+
+`data/translations.xlsx` follows the contract in the template
+(`data/translations_template.xlsx`, sheets `docstrings`, `instructions`,
+`guide`). Until real translations exist, `python -m pipeline mock-translations`
+writes a mock file (`[CS] ` + EN, status `reviewed`); it refuses to overwrite a
+file with real translations unless `--force` is given. Prompts built from mock
+text are flagged `mock_translation: true` in `prompts.jsonl`, and live model runs
+refuse them.
+
+Validation (errors stop the step, listing every offending task id):
+missing/duplicate/unknown task ids, empty cells, status other than `reviewed`,
+`docstring_en` not matching `tasks.json`, missing/reordered `{EXAMPLE_k}`
+markers, triple quotes, missing or empty instructions, and instruction
+placeholders differing from EN (`{entry_point}` is the only one allowed).
+Warnings: CS/EN prose length ratio outside 0.6–1.8, values from EN prose
+(numbers, quoted strings, `[...]` lists) not found verbatim in the translation,
+and new backslashes. A pilot run only needs the pilot rows to be complete.
+
+Prompt = instruction (with `{entry_point}` filled in) + blank line + a fenced
+` ```python ` block with the buggy code. **Invariant check:** for every task,
+the code with the docstring content removed must be byte-identical to the
+original in every language, every example block must appear verbatim and in
+order, and the rebuilt English code must equal the original exactly. Any
+violation stops the step.
+
+`data/prompts.jsonl` fields: `prompt_id` (`<task_id>::<lang>`), `task_id`,
+`language`, `prompt`, `entry_point`, `mock_translation`.
+
 Dataset quirk: in Python/115 the string literal comes after `import math`, so
 it is not a real docstring; it is still treated as the task description.
 
@@ -104,6 +136,6 @@ it is not a real docstring; it is still treated as the task description.
 - [x] Phase 0: setup, config, CLI skeleton
 - [x] Phase 1: s01 + s05 executor (sampling, docstring split, sanity check);
       s05 step wiring follows in Phase 3 together with s04
-- [ ] Phase 2: mock translations + s02
+- [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
 - [ ] Phase 3: s03 (fake provider) + s04 + s06
 - [ ] Phase 4: real providers
