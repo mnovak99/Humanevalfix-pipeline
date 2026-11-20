@@ -19,7 +19,26 @@ Copy-Item .env.example .env   # then fill in API keys
 uv run pytest
 ```
 
-## Usage
+## Web UI
+
+Double-click `start_ui.cmd` (or run `uv run python -m pipeline ui`). The UI opens at
+http://127.0.0.1:8501 and is reachable from this computer only.
+
+* **Overview**: which step files exist for the chosen task set (pilot/full, dry/live),
+  model-call progress, translation state.
+* **Run**: run all steps, one step, or the smoke test. Runs are background processes with a
+  live log; they keep going if the browser tab closes, and can be stopped from the sidebar.
+  A live run shows the call count and estimated cost and starts only after you tick the
+  confirmation box; it is blocked while API keys are missing or translations are mock/invalid.
+* **Translations**: validation errors and warnings, replacing `data/translations.xlsx` with
+  the translators' export (the old file is backed up to `outputs/tmp/translations_backups/`),
+  downloading the empty template, creating mock translations.
+* **Results**: pass rate per model × language, status counts, a filterable table, CSV
+  download, and an inspector showing prompt, response, extracted code and stderr per row.
+
+Close the console window to stop the UI; stop a running pipeline run first.
+
+## Usage (command line)
 
 ```powershell
 uv run python -m pipeline run --step 01 --pilot
@@ -138,7 +157,12 @@ with a successful record are skipped; failed calls are retried on the next run
 exponential backoff with jitter for transient errors (429/5xx/network), up to
 `retry_max_attempts`; other errors become a `failed` record and the run goes on.
 No `temperature`/`top_p`/`top_k` is ever sent; `params` from `config.yaml` are
-passed through.
+passed through. Effort is `low` for every model.
+
+Each record stores the model `settings` it ran with (provider, `max_tokens`, `params`)
+and a `settings_hash`. Resume skips a call only if it succeeded **with the current
+settings**; after a config change the call is made again and the new record supersedes
+the old one, so results never mix configurations.
 
 A live (non-dry) run refuses prompts built from mock translations, then prints
 the number of calls and the estimated cost (`cost_estimate_tokens` per call ×
@@ -222,6 +246,7 @@ it is not a real docstring; it is still treated as the task description.
       s05 step wiring follows in Phase 3 together with s04
 - [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
 - [x] Phase 3: s03 (fake provider) + s04 + s05 wiring + s06; `--all --pilot --dry-run` works end-to-end
+- [x] Web UI (Streamlit), effort low for all models
 - [x] Phase 4: real providers (Anthropic, OpenAI; Gemini disabled), offline-tested with
       stubbed SDK clients; no paid calls made yet
 

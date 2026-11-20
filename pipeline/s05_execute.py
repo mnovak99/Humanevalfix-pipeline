@@ -59,7 +59,7 @@ def _exception_type(stderr: str) -> str | None:
     return m.group(1).rsplit(".", 1)[-1] if m else None
 
 
-def _kill_tree(proc: subprocess.Popen[bytes]) -> None:
+def kill_tree(proc: subprocess.Popen) -> None:
     """Kill the process and its children (subprocess.run's timeout only kills the direct child)."""
     if sys.platform == "win32":
         subprocess.run(
@@ -99,7 +99,7 @@ def execute_program(program: str, timeout_s: float, tmp_dir: Path, keep_file: bo
         try:
             _, err_b = proc.communicate(timeout=timeout_s)
         except subprocess.TimeoutExpired:
-            _kill_tree(proc)
+            kill_tree(proc)
             _, err_b = proc.communicate()
             return ExecResult(TIMEOUT, None, None, time.perf_counter() - t0, _tail(err_b))
         duration = time.perf_counter() - t0

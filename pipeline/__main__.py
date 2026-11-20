@@ -33,6 +33,31 @@ def _step_fn(step: str) -> Callable[[RunContext], None]:
     return importlib.import_module(STEPS[step]).run
 
 
+def run_ui(port: int, open_browser: bool = True) -> int:
+    import subprocess
+    import threading
+    import webbrowser
+    from pathlib import Path
+
+    app = Path(__file__).resolve().parent / "ui" / "app.py"
+    url = f"http://127.0.0.1:{port}"
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(app),
+        "--server.address", "127.0.0.1",  # local only: the UI can start paid runs
+        "--server.port", str(port),
+        "--server.headless", "true",  # skips Streamlit's first-run email prompt
+        "--browser.gatherUsageStats", "false",
+        "--client.toolbarMode", "minimal",  # hides the "Deploy" button
+    ]  # fmt: skip
+    log.info("web UI at %s (close this window or press Ctrl+C to stop)", url)
+    if open_browser:
+        threading.Timer(3.0, webbrowser.open, args=(url,)).start()
+    try:
+        return subprocess.call(cmd)
+    except KeyboardInterrupt:
+        return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m pipeline")
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
@@ -50,6 +75,10 @@ def build_parser() -> argparse.ArgumentParser:
     smoke.add_argument("--n-tasks", type=int, default=2, help="number of tasks (default 2)")
     smoke.add_argument("--dry-run", action="store_true", help="fake provider, no API calls")
     smoke.add_argument("--yes", action="store_true", help="skip the cost confirmation")
+
+    ui = sub.add_parser("ui", help="open the web UI (local only, http://127.0.0.1:8501)")
+    ui.add_argument("--port", type=int, default=8501)
+    ui.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
 
     mock = sub.add_parser("mock-translations", help="create a mock data/translations.xlsx ([CS] + EN)")
     mock.add_argument("--force", action="store_true", help="overwrite a file that contains real translations")
@@ -74,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
 
             translations.write_mock(RunContext(config=config), force=args.force)
             return 0
+        if args.command == "ui":
+            return run_ui(args.port, open_browser=not args.no_browser)
         if args.command == "smoke":
             from pipeline.smoke import run_smoke
 

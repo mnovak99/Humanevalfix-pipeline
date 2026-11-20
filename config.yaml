@@ -25,7 +25,8 @@ models:
     provider: anthropic
     enabled: true
     max_tokens: 4000
-    params: {}        # provider-specific passthrough, e.g. effort setting
+    # Provider-specific passthrough. Effort is "low" for every model so they are comparable.
+    params: {output_config: {effort: low}}
     price_per_mtok: {input: 0.10, output: 0.50}
   - name: gpt-6-luna
     provider: openai
@@ -37,5 +38,5 @@ models:
     provider: gemini
     enabled: false    # fallback only
     max_tokens: 4000
-    params: {}
+    params: {thinking_config: {thinking_level: low}}
     price_per_mtok: {input: 0.30, output: 2.50}

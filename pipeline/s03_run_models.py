@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import sys
 import threading
@@ -56,9 +58,28 @@ def latest_by_key(records: list[dict]) -> dict[tuple[str, str, int], dict]:
     return {response_key(r): r for r in records}
 
 
+def model_settings(model: ModelConfig) -> dict:
+    """Everything about a model call that can change its output (besides the prompt)."""
+    return {"provider": model.provider, "max_tokens": model.max_tokens, "params": model.params}
+
+
+def settings_hash(model: ModelConfig) -> str:
+    blob = json.dumps(model_settings(model), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+
+
 def plan_jobs(prompts: list[dict], models: list[ModelConfig], runs: int, existing: list[dict]) -> list[Job]:
-    """All prompt x model x run jobs without a successful record yet."""
-    done = {k for k, r in latest_by_key(existing).items() if r["status"] == OK}
+    """All prompt x model x run jobs without a successful record made with the current settings.
+
+    A record from different settings (e.g. effort changed in config.yaml) does not count as
+    done, so results never mix configurations; the new record supersedes it downstream.
+    """
+    current = {m.name: settings_hash(m) for m in models}
+    done = {
+        k
+        for k, r in latest_by_key(existing).items()
+        if r["status"] == OK and r.get("settings_hash") == current.get(r["model"])
+    }
     jobs = [Job(p, m, run) for p in prompts for m in models for run in range(1, runs + 1)]
     return [j for j in jobs if j.key not in done]
 
@@ -141,6 +162,8 @@ def make_record(job: Job, result: dict, attempts: int, dry_run: bool) -> dict:
         "model": job.model.name,
         "provider": "fake" if dry_run else job.model.provider,
         "run": job.run,
+        "settings": model_settings(job.model),
+        "settings_hash": settings_hash(job.model),
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "attempts": attempts,
         **empty,

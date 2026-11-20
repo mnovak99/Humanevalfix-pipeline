@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pandas as pd
 import pytest
 
@@ -12,7 +14,9 @@ from pipeline.s03_run_models import (
     call_with_retries,
     check_not_mock,
     estimate_cost,
+    make_record,
     plan_jobs,
+    settings_hash,
 )
 from pipeline.s06_aggregate import aggregate
 
@@ -30,17 +34,36 @@ def _resp(text: str = "ok") -> Response:
 
 
 def test_plan_jobs_resume_skips_ok_and_retries_failed() -> None:
+    h = settings_hash(M1)
     existing = [
-        {"prompt_id": "Python/1::en", "model": "m1", "run": 1, "status": OK},
-        {"prompt_id": "Python/1::en", "model": "m1", "run": 2, "status": FAILED},
-        {"prompt_id": "Python/1::cs", "model": "m1", "run": 1, "status": FAILED},
-        {"prompt_id": "Python/1::cs", "model": "m1", "run": 1, "status": OK},  # later success wins
+        {"prompt_id": "Python/1::en", "model": "m1", "run": 1, "status": OK, "settings_hash": h},
+        {"prompt_id": "Python/1::en", "model": "m1", "run": 2, "status": FAILED, "settings_hash": h},
+        {"prompt_id": "Python/1::cs", "model": "m1", "run": 1, "status": FAILED, "settings_hash": h},
+        {"prompt_id": "Python/1::cs", "model": "m1", "run": 1, "status": OK, "settings_hash": h},  # later wins
     ]
     jobs = plan_jobs(PROMPTS, [M1, M2], 2, existing)
     keys = {j.key for j in jobs}
     assert len(jobs) == 4 * 2 * 2 - 2
     assert ("Python/1::en", "m1", 1) not in keys and ("Python/1::cs", "m1", 1) not in keys
     assert ("Python/1::en", "m1", 2) in keys
+
+
+def test_plan_jobs_reruns_calls_made_with_other_settings() -> None:
+    old = replace(M1, params={"output_config": {"effort": "medium"}})
+    new = replace(M1, params={"output_config": {"effort": "low"}})
+    assert settings_hash(old) != settings_hash(new)
+    existing = [{"prompt_id": "Python/1::en", "model": "m1", "run": 1, "status": OK, "settings_hash": settings_hash(old)}]
+    assert ("Python/1::en", "m1", 1) in {j.key for j in plan_jobs(PROMPTS, [new], 1, existing)}
+    assert ("Python/1::en", "m1", 1) not in {j.key for j in plan_jobs(PROMPTS, [old], 1, existing)}
+    # Records from before settings were tracked count as unknown settings: rerun.
+    legacy = [{"prompt_id": "Python/1::en", "model": "m1", "run": 1, "status": OK}]
+    assert ("Python/1::en", "m1", 1) in {j.key for j in plan_jobs(PROMPTS, [new], 1, legacy)}
+
+
+def test_record_stores_settings() -> None:
+    rec = make_record(Job(PROMPTS[0], M1, 1), {"status": OK}, 1, dry_run=True)
+    assert rec["settings"] == {"provider": "anthropic", "max_tokens": 100, "params": {}}
+    assert rec["settings_hash"] == settings_hash(M1)
 
 
 def test_cost_estimate() -> None:

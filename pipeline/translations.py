@@ -100,7 +100,7 @@ def write_mock(ctx: RunContext, force: bool = False) -> Path:
     if not full_tasks_path.exists():
         raise TranslationError(f"{full_tasks_path} not found; run step 01 first")
     path = ctx.config.translations_path
-    if path.exists() and not force and not _is_mock_file(path, ctx.config.languages):
+    if path.exists() and not force and not is_mock_file(path, ctx.config.languages):
         raise TranslationError(f"{path} contains non-mock translations; refusing to overwrite (use --force)")
     tasks = read_json(full_tasks_path)["tasks"]
     write_workbook(path, tasks, ctx.config, mock=True)
@@ -108,7 +108,7 @@ def write_mock(ctx: RunContext, force: bool = False) -> Path:
     return path
 
 
-def _is_mock_file(path: Path, languages: list[str]) -> bool:
+def is_mock_file(path: Path, languages: list[str]) -> bool:
     try:
         sheets = _read_sheets(path)
     except Exception:
