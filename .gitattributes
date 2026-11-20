@@ -1,0 +1,3 @@
+# Keep LF everywhere: task code/docstrings must stay byte-identical across platforms.
+* text=auto eol=lf
+*.xlsx binary

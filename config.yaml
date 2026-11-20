@@ -1,0 +1,27 @@
+seed: 42
+n_tasks: 100          # full run
+pilot_n_tasks: 20     # used with --pilot (first N of the same seeded order)
+languages: [en, cs]
+runs_per_prompt: 3
+exec_timeout_s: 10
+translations_path: data/translations.xlsx
+
+models:
+  - name: claude-haiku-5-5
+    provider: anthropic
+    enabled: true
+    max_tokens: 4000
+    params: {}        # provider-specific passthrough, e.g. effort setting
+    price_per_mtok: {input: 0.10, output: 0.50}
+  - name: gpt-6-luna
+    provider: openai
+    enabled: true
+    max_tokens: 4000
+    params: {reasoning: {effort: low}}
+    price_per_mtok: {input: 0.10, output: 0.50}
+  - name: gemini-3.5-flash-lite
+    provider: gemini
+    enabled: false    # fallback only
+    max_tokens: 4000
+    params: {}
+    price_per_mtok: {input: 0.30, output: 2.50}
