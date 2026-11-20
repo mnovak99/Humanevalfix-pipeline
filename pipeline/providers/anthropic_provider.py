@@ -56,7 +56,7 @@ class AnthropicProvider:
             latency_s=latency,
             raw_meta={
                 "id": msg.id,
-                "request_id": msg._request_id,
+                "request_id": getattr(msg, "_request_id", None),  # set only on HTTP-built responses
                 "stop_reason": msg.stop_reason,
                 "stop_details": stop_details,
                 "block_types": [b.type for b in msg.content],

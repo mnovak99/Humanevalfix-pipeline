@@ -206,5 +206,8 @@ it is not a real docstring; it is still treated as the task description.
       s05 step wiring follows in Phase 3 together with s04
 - [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
 - [x] Phase 3: s03 (fake provider) + s04 + s05 wiring + s06; `--all --pilot --dry-run` works end-to-end
-- [~] Phase 4: real providers implemented; offline tests written but not yet run on
-      this machine (Windows Application Control blocks `pydantic_core`); no paid calls made
+- [x] Phase 4: real providers (Anthropic, OpenAI; Gemini disabled), offline-tested with
+      stubbed SDK clients; no paid calls made yet
+
+Note: `pydantic` is pinned to 2.12.5 because Windows Smart App Control blocks the
+newer `pydantic-core` DLL. Keep the pin unless the pipeline runs elsewhere (WSL/Linux).
