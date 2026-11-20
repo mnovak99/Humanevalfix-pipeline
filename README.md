@@ -26,6 +26,7 @@ uv run python -m pipeline run --step 01 --pilot
 uv run python -m pipeline run --step 03 --dry-run
 uv run python -m pipeline run --all --pilot --dry-run
 uv run python -m pipeline mock-translations
+uv run python -m pipeline smoke              # EN-only check of the real APIs
 ```
 
 `--pilot` uses `pilot_n_tasks` (a prefix of the same seeded order, so the pilot
@@ -169,6 +170,21 @@ failed record. `output_tokens` includes thinking/reasoning tokens. Model-side
 metadata (stop reason / status, refusal details, request id) goes to `raw_meta`.
 Claude Haiku 5.5 runs adaptive thinking by default with effort `medium` when
 `params` is empty.
+
+### Smoke test (real APIs, English only)
+
+```powershell
+uv run python -m pipeline smoke              # 2 tasks x enabled models, 1 run each
+uv run python -m pipeline smoke --n-tasks 5
+uv run python -m pipeline smoke --dry-run    # same path with the fake provider
+```
+
+Checks API keys, model ids and `params` before the experiment, without needing
+translations. It takes the first N tasks of `data/tasks.json`, builds the same
+English prompts as step 02 (tested to be identical) and runs steps 03–06 with one
+run per prompt. Same cost confirmation as a live run. Files: `data/prompts_smoke.jsonl`,
+`outputs/*_smoke.*`; they never mix with research data. Completed calls are
+skipped on a rerun; delete `outputs/responses_smoke.jsonl` to start over.
 
 ## Extraction (step 04)
 

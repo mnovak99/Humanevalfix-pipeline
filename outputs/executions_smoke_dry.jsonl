@@ -1,0 +1,4 @@
+{"prompt_id": "Python/23::en", "task_id": "Python/23", "language": "en", "model": "claude-haiku-5-5", "run": 1, "exec_status": "passed", "exc_type": null, "returncode": 0, "duration_s": 0.04170880001038313, "stderr_tail": ""}
+{"prompt_id": "Python/23::en", "task_id": "Python/23", "language": "en", "model": "gpt-6-luna", "run": 1, "exec_status": "passed", "exc_type": null, "returncode": 0, "duration_s": 0.04169380001258105, "stderr_tail": ""}
+{"prompt_id": "Python/147::en", "task_id": "Python/147", "language": "en", "model": "claude-haiku-5-5", "run": 1, "exec_status": "skipped", "exc_type": null, "returncode": null, "duration_s": 0.0, "stderr_tail": ""}
+{"prompt_id": "Python/147::en", "task_id": "Python/147", "language": "en", "model": "gpt-6-luna", "run": 1, "exec_status": "skipped", "exc_type": null, "returncode": null, "duration_s": 0.0, "stderr_tail": ""}

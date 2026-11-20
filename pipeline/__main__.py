@@ -46,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--dry-run", action="store_true", help="fake provider, no API calls; writes *_dry files")
     run.add_argument("--yes", action="store_true", help="skip the cost confirmation for live runs")
 
+    smoke = sub.add_parser("smoke", help="EN-only check of the real APIs on a few tasks (writes *_smoke files)")
+    smoke.add_argument("--n-tasks", type=int, default=2, help="number of tasks (default 2)")
+    smoke.add_argument("--dry-run", action="store_true", help="fake provider, no API calls")
+    smoke.add_argument("--yes", action="store_true", help="skip the cost confirmation")
+
     mock = sub.add_parser("mock-translations", help="create a mock data/translations.xlsx ([CS] + EN)")
     mock.add_argument("--force", action="store_true", help="overwrite a file that contains real translations")
     return parser
@@ -68,6 +73,11 @@ def main(argv: list[str] | None = None) -> int:
             from pipeline import translations
 
             translations.write_mock(RunContext(config=config), force=args.force)
+            return 0
+        if args.command == "smoke":
+            from pipeline.smoke import run_smoke
+
+            run_smoke(config, args.n_tasks, yes=args.yes, dry_run=args.dry_run)
             return 0
 
         ctx = RunContext(config=config, pilot=args.pilot, dry_run=args.dry_run, yes=args.yes)

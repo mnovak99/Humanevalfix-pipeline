@@ -132,13 +132,14 @@ def get_api_key(provider: str) -> str:
 class RunContext:
     """Run mode plus the file paths derived from it.
 
-    --pilot and --dry-run add suffixes so test runs never overwrite real data.
+    --pilot, --dry-run and smoke mode add suffixes so test runs never overwrite real data.
     """
 
     config: Config
     pilot: bool = False
     dry_run: bool = False
     yes: bool = False
+    smoke: bool = False  # EN-only API check; reads the full task set
     root: Path = ROOT
 
     @property
@@ -147,6 +148,8 @@ class RunContext:
 
     def _suffix(self, include_dry: bool) -> str:
         s = "_pilot" if self.pilot else ""
+        if self.smoke:
+            s += "_smoke"
         if include_dry and self.dry_run:
             s += "_dry"
         return s
@@ -166,7 +169,7 @@ class RunContext:
     # Steps 01-02 do not depend on --dry-run (no model calls involved).
     @property
     def tasks_path(self) -> Path:
-        return self.data_dir / f"tasks{self._suffix(False)}.json"
+        return self.data_dir / f"tasks{'_pilot' if self.pilot else ''}.json"
 
     @property
     def translations_template_path(self) -> Path:

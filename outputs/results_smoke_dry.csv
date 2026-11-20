@@ -1,0 +1,5 @@
+task_id,bug_type,language,model,run,extraction_status,exec_status,passed,input_tokens,output_tokens,reasoning_tokens,latency_s
+Python/23,value misuse,en,claude-haiku-5-5,1,no_code_block,passed,1,48,38,0,0.0
+Python/23,value misuse,en,gpt-6-luna,1,no_code_block,passed,1,48,38,0,0.0
+Python/147,missing logic,en,claude-haiku-5-5,1,api_error,skipped,0,,,,
+Python/147,missing logic,en,gpt-6-luna,1,function_missing,skipped,0,191,12,0,0.0
