@@ -3,23 +3,17 @@
 from __future__ import annotations
 
 import os
-from collections import Counter
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from pipeline.config import API_KEY_ENV, Config, RunContext
+from pipeline.dataset import DatasetError, file_sha256, load_rows
 from pipeline.io import read_json, read_jsonl
-from pipeline.s03_run_models import OK, estimate_cost, latest_by_key, plan_jobs
-from pipeline.translations import (
-    STATUSES,
-    TranslationError,
-    is_mock_file,
-    doc_col,
-    load_and_validate,
-)
+from pipeline.s03_run_models import OK, current_responses, estimate_cost, plan_jobs
+from pipeline.validation import ValidationReport, validate
 
 
 @dataclass
@@ -77,7 +71,9 @@ def call_progress(ctx: RunContext) -> CallProgress:
     n_prompts = _jsonl_rows(ctx.prompts_path) or ctx.n_tasks * len(cfg.languages)
     planned = n_prompts * len(cfg.enabled_models) * cfg.runs_per_prompt
     remaining = cost_estimate(ctx).calls
-    failed = sum(1 for r in latest_by_key(read_jsonl(ctx.responses_path)).values() if r["status"] != OK)
+    prompts = read_jsonl(ctx.prompts_path)
+    current = current_responses(prompts, cfg.enabled_models, read_jsonl(ctx.responses_path))
+    failed = sum(1 for r in current.values() if r["status"] != OK)
     return CallProgress(planned, planned - remaining, failed)
 
 
@@ -107,41 +103,36 @@ def cost_estimate(ctx: RunContext, n_prompts: int | None = None) -> CostEstimate
 
 
 @dataclass
-class TranslationStatus:
-    exists: bool
-    is_mock: bool = False
-    status_counts: dict[str, int] = field(default_factory=dict)
-    errors: str | None = None
-    warnings: list[str] = field(default_factory=list)
+class DatasetStatus:
+    path: Path
+    load_error: str | None = None
+    n_rows: int = 0
+    sha256: str | None = None
+    scope: str = ""  # which tasks the report covers
+    report: ValidationReport | None = None
 
     @property
-    def usable_live(self) -> bool:
-        return self.exists and not self.is_mock and self.errors is None
+    def ok(self) -> bool:
+        return self.load_error is None and self.report is not None and self.report.ok
 
 
-def translation_status(cfg: Config, pilot: bool) -> TranslationStatus:
-    path = cfg.translations_path
-    if not path.exists():
-        return TranslationStatus(False)
-    sheets = pd.read_excel(path, sheet_name=None, dtype=str, keep_default_na=False)
-    df = sheets.get("docstrings", pd.DataFrame())
-    counts = Counter(df["status"].str.strip().str.lower()) if "status" in df else Counter()
-    st = TranslationStatus(
-        exists=True,
-        is_mock=is_mock_file(path, cfg.languages),
-        status_counts={s: counts.get(s, 0) for s in STATUSES} | {k: v for k, v in counts.items() if k not in STATUSES},
-    )
-    ctx = RunContext(cfg, pilot=pilot)
-    full = RunContext(cfg)
-    if not ctx.tasks_path.exists():
-        st.errors = f"{ctx.tasks_path.name} not found; run step 01 first"
-        return st
-    tasks = read_json(ctx.tasks_path)["tasks"]
-    known = {t["task_id"] for t in read_json(full.tasks_path)["tasks"]} if full.tasks_path.exists() else set()
+def dataset_status(cfg: Config, pilot: bool) -> DatasetStatus:
+    """Validate the translations of the selected task set (all 164 rows before step 01 ran)."""
+    st = DatasetStatus(cfg.dataset_path)
     try:
-        st.warnings = load_and_validate(path, cfg.languages, tasks, known).warnings
-    except TranslationError as exc:
-        st.errors = str(exc)
+        rows = load_rows(cfg.dataset_path, cfg.text_fields)
+    except DatasetError as exc:
+        st.load_error = str(exc)
+        return st
+    st.n_rows, st.sha256 = len(rows), file_sha256(cfg.dataset_path)
+    ctx = RunContext(cfg, pilot=pilot)
+    if ctx.tasks_path.exists():
+        tasks = read_json(ctx.tasks_path)["tasks"]
+        st.scope = f"{len(tasks)} sampled tasks ({ctx.tasks_path.name})"
+    else:
+        tasks = rows
+        st.scope = f"all {len(rows)} rows (run step 01 to sample)"
+    st.report = validate(tasks, cfg.text_fields)
     return st
 
 
@@ -150,7 +141,7 @@ def smoke_estimate(cfg: Config, n_tasks: int) -> CostEstimate:
 
     ctx = RunContext(replace(cfg, runs_per_prompt=1), smoke=True)
     tasks = read_json(ctx.tasks_path)["tasks"][:n_tasks] if ctx.tasks_path.exists() else []
-    prompts = [p.to_dict() for p in build_smoke_prompts(tasks, cfg.instruction_template_en)]
+    prompts = [p.to_dict() for p in build_smoke_prompts(tasks, cfg)]
     jobs = plan_jobs(prompts, ctx.config.enabled_models, 1, read_jsonl(ctx.responses_path))
     return CostEstimate(len(jobs), estimate_cost(jobs, ctx.config))
 
@@ -159,10 +150,6 @@ def missing_api_keys(cfg: Config) -> list[str]:
     """Env var names of missing keys for enabled models (presence only, values never read out)."""
     names = {API_KEY_ENV[m.provider] for m in cfg.enabled_models}
     return sorted(n for n in names if not os.environ.get(n, "").strip())
-
-
-def translation_columns(cfg: Config) -> list[str]:
-    return [doc_col(lang) for lang in cfg.languages]
 
 
 def load_results(ctx: RunContext) -> pd.DataFrame | None:

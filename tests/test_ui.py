@@ -61,7 +61,7 @@ def test_missing_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_app_renders_without_errors() -> None:
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception, at.exception
-    assert [t.label for t in at.tabs] == ["Overview", "Run", "Translations", "Results"]
+    assert [t.label for t in at.tabs] == ["Overview", "Run", "Dataset", "Results"]
 
 
 def test_paid_run_needs_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:

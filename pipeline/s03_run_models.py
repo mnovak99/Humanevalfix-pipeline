@@ -27,7 +27,6 @@ from pipeline.io import append_jsonl, read_json, read_jsonl
 from pipeline.providers import NonRetryableError, Provider, RetryableError, get_live_provider
 from pipeline.providers.base import checked_params
 from pipeline.providers.fake import FakeProvider
-from pipeline.translations import is_mock_text
 
 log = logging.getLogger(__name__)
 
@@ -68,20 +67,44 @@ def settings_hash(model: ModelConfig) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
 
-def plan_jobs(prompts: list[dict], models: list[ModelConfig], runs: int, existing: list[dict]) -> list[Job]:
-    """All prompt x model x run jobs without a successful record made with the current settings.
+def prompt_hash(prompt_text: str) -> str:
+    return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:12]
 
-    A record from different settings (e.g. effort changed in config.yaml) does not count as
-    done, so results never mix configurations; the new record supersedes it downstream.
+
+def plan_jobs(prompts: list[dict], models: list[ModelConfig], runs: int, existing: list[dict]) -> list[Job]:
+    """All prompt x model x run jobs without a successful record for the same prompt and settings.
+
+    A record made with a different prompt text (templates changed) or different model
+    settings (e.g. effort) does not count as done, so results never mix configurations;
+    the new record supersedes it downstream.
     """
-    current = {m.name: settings_hash(m) for m in models}
+    current_settings = {m.name: settings_hash(m) for m in models}
+    current_prompt = {p["prompt_id"]: prompt_hash(p["prompt"]) for p in prompts if p.get("prompt")}
     done = {
         k
         for k, r in latest_by_key(existing).items()
-        if r["status"] == OK and r.get("settings_hash") == current.get(r["model"])
+        if r["status"] == OK
+        and r.get("settings_hash") == current_settings.get(r["model"])
+        and r.get("prompt_hash") == current_prompt.get(r["prompt_id"])
     }
     jobs = [Job(p, m, run) for p in prompts for m in models for run in range(1, runs + 1)]
     return [j for j in jobs if j.key not in done]
+
+
+def current_responses(prompts: list[dict], models: list[ModelConfig], existing: list[dict]) -> dict[tuple[str, str, int], dict]:
+    """Latest record per key, keeping only those made with the current prompt and settings.
+
+    Records for other prompt texts, models or settings (older configurations) are left in
+    responses.jsonl as history but never reach extraction or results.
+    """
+    current_settings = {m.name: settings_hash(m) for m in models}
+    current_prompt = {p["prompt_id"]: prompt_hash(p["prompt"]) for p in prompts}
+    return {
+        k: r
+        for k, r in latest_by_key(existing).items()
+        if r.get("settings_hash") == current_settings.get(r["model"])
+        and r.get("prompt_hash") == current_prompt.get(r["prompt_id"])
+    }
 
 
 def estimate_cost(jobs: list[Job], cfg: Config) -> dict[str, tuple[int, float]]:
@@ -93,21 +116,6 @@ def estimate_cost(jobs: list[Job], cfg: Config) -> dict[str, tuple[int, float]]:
         n, c = per_model.get(j.model.name, (0, 0.0))
         per_model[j.model.name] = (n + 1, c + cost)
     return per_model
-
-
-def check_not_mock(prompts: list[dict]) -> None:
-    mock = sorted(
-        {
-            p["prompt_id"]
-            for p in prompts
-            if p.get("mock_translation") or is_mock_text(p["prompt"], p["language"])
-        }
-    )
-    if mock:
-        raise LiveRunRefused(
-            f"{len(mock)} prompts use MOCK translations (e.g. {mock[:3]}); live runs are refused. "
-            "Replace data/translations.xlsx with real translations and rerun step 02."
-        )
 
 
 def confirm(question: str, assume_yes: bool) -> bool:
@@ -164,6 +172,7 @@ def make_record(job: Job, result: dict, attempts: int, dry_run: bool) -> dict:
         "run": job.run,
         "settings": model_settings(job.model),
         "settings_hash": settings_hash(job.model),
+        "prompt_hash": prompt_hash(job.prompt["prompt"]),
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "attempts": attempts,
         **empty,
@@ -232,7 +241,6 @@ def run(ctx: RunContext) -> None:
         fake = fake_provider_for(ctx, prompts)
         provider_for: Callable[[ModelConfig], Provider] = lambda _m: fake  # noqa: E731
     else:
-        check_not_mock(prompts)
         for m in models:
             try:
                 checked_params(m)

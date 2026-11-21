@@ -37,28 +37,20 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
-class DatasetConfig:
-    name: str
-    config: str
-    split: str
-    revision: str | None
-
-
-@dataclass(frozen=True)
 class Config:
-    dataset: DatasetConfig
+    dataset_path: Path
+    text_fields: dict[str, str]  # language -> dataset field with the task description
+    prompt_templates: dict[str, str]  # language -> template with {field} placeholders
     exec_workers: int
     api_workers: int
     retry_max_attempts: int
     cost_estimate_tokens: Price  # assumed tokens per call (input, output)
-    instruction_template_en: str
     seed: int
     n_tasks: int
     pilot_n_tasks: int
     languages: list[str]
     runs_per_prompt: int
     exec_timeout_s: float
-    translations_path: Path
     models: list[ModelConfig]
 
     @property
@@ -80,34 +72,32 @@ def _parse_model(raw: dict[str, Any]) -> ModelConfig:
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    ds = raw["dataset"]
     cfg = Config(
-        dataset=DatasetConfig(
-            name=str(ds["name"]),
-            config=str(ds["config"]),
-            split=str(ds["split"]),
-            revision=str(ds["revision"]) if ds.get("revision") else None,
-        ),
+        dataset_path=ROOT / raw["dataset_path"],
+        text_fields={str(k): str(v) for k, v in raw["text_fields"].items()},
+        prompt_templates={str(k): str(v) for k, v in raw["prompt_templates"].items()},
         exec_workers=int(raw.get("exec_workers", 4)),
         api_workers=int(raw.get("api_workers", 4)),
         retry_max_attempts=int(raw.get("retry_max_attempts", 6)),
         cost_estimate_tokens=Price(
             float(raw["cost_estimate_tokens"]["input"]), float(raw["cost_estimate_tokens"]["output"])
         ),
-        instruction_template_en=str(raw["instruction_template_en"]),
         seed=int(raw["seed"]),
         n_tasks=int(raw["n_tasks"]),
         pilot_n_tasks=int(raw["pilot_n_tasks"]),
         languages=[str(lang) for lang in raw["languages"]],
         runs_per_prompt=int(raw["runs_per_prompt"]),
         exec_timeout_s=float(raw["exec_timeout_s"]),
-        translations_path=ROOT / raw["translations_path"],
         models=[_parse_model(m) for m in raw["models"]],
     )
     if cfg.pilot_n_tasks > cfg.n_tasks:
         raise ValueError("pilot_n_tasks must not exceed n_tasks (pilot must be a subset)")
     if "en" not in cfg.languages:
         raise ValueError("languages must include 'en' (the source language)")
+    for section in ("text_fields", "prompt_templates"):
+        missing = [lang for lang in cfg.languages if lang not in getattr(cfg, section)]
+        if missing:
+            raise ValueError(f"{section} has no entry for languages {missing}")
     return cfg
 
 
@@ -170,10 +160,6 @@ class RunContext:
     @property
     def tasks_path(self) -> Path:
         return self.data_dir / f"tasks{'_pilot' if self.pilot else ''}.json"
-
-    @property
-    def translations_template_path(self) -> Path:
-        return self.data_dir / "translations_template.xlsx"
 
     @property
     def prompts_path(self) -> Path:

@@ -1,31 +1,29 @@
-"""Streamlit UI: run pipeline steps, manage translations, inspect results.
+"""Streamlit UI: run pipeline steps, check the dataset, inspect results.
 
 Start with `uv run python -m pipeline ui` (or double-click start_ui.cmd).
 """
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import replace
-from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
 from pipeline.config import ROOT, RunContext, load_config, load_env
-from pipeline.translations import TranslationError, write_mock
 from pipeline.ui.data import (
     call_progress,
     cost_estimate,
+    dataset_status,
     load_results,
     missing_api_keys,
     pass_rate_table,
     record_details,
     smoke_estimate,
     step_files,
-    translation_status,
 )
 from pipeline.ui.runner import Runner, pipeline_args, read_log_tail
+from pipeline.validation import ERROR_CHECKS, WARNING_CHECKS
 
 STEPS = {
     "01": "Prepare tasks (dataset, sanity check, sample)",
@@ -35,7 +33,6 @@ STEPS = {
     "05": "Execute tests",
     "06": "Aggregate results",
 }
-BACKUP_DIR = ROOT / "outputs" / "tmp" / "translations_backups"
 
 st.set_page_config(page_title="HumanEvalFix pipeline", layout="wide")
 
@@ -89,7 +86,7 @@ with st.sidebar:
 
     run_status()
 
-overview, run_tab, trans_tab, results_tab = st.tabs(["Overview", "Run", "Translations", "Results"])
+overview, run_tab, dataset_tab, results_tab = st.tabs(["Overview", "Run", "Dataset", "Results"])
 
 # --------------------------------------------------------------------------- overview
 with overview:
@@ -108,20 +105,16 @@ with overview:
             ]
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     prog = call_progress(ctx)
     st.markdown(f"**Model calls:** {prog.ok} / {prog.planned} done" + (f", {prog.failed} failed (retried next run)" if prog.failed else ""))
     st.progress(min(1.0, prog.ok / prog.planned) if prog.planned else 0.0)
-    tr = translation_status(cfg, pilot)
-    if not tr.exists:
-        st.warning("No translations file yet (see the Translations tab).")
-    elif tr.is_mock:
-        st.warning("Translations are the MOCK version: only dry runs are possible.")
-    elif tr.errors:
-        st.error("Translations are not valid yet (see the Translations tab).")
+    ds = dataset_status(cfg, pilot)
+    if ds.ok:
+        st.success(f"Translation checks pass for {ds.scope}.")
     else:
-        st.success("Translations are valid for this task set.")
+        st.error("The dataset or its translations have problems (see the Dataset tab).")
 
 # --------------------------------------------------------------------------- run
 with run_tab:
@@ -160,10 +153,8 @@ with run_tab:
         missing = missing_api_keys(cfg)
         if missing:
             problems.append(f"Missing API keys in .env: {', '.join(missing)}")
-        if action != "smoke":
-            tr = translation_status(cfg, pilot)
-            if not tr.usable_live:
-                problems.append("Live runs need real, valid, reviewed translations (see the Translations tab).")
+        if not dataset_status(cfg, pilot).ok:
+            problems.append("Translation checks fail for this task set (see the Dataset tab).")
         if est.calls == 0:
             st.info("All calls for this set are already done; the run only re-runs the other steps.")
         confirmed = st.checkbox(f"I confirm a paid run of {est.calls} calls (~${est.total:.4f})", disabled=bool(problems))
@@ -199,56 +190,44 @@ with run_tab:
 
     live_log()
 
-# --------------------------------------------------------------------------- translations
-with trans_tab:
-    tr = translation_status(cfg, pilot)
-    path = cfg.translations_path
-    if not tr.exists:
-        st.warning(f"`{path.relative_to(ROOT).as_posix()}` does not exist yet.")
+# --------------------------------------------------------------------------- dataset
+with dataset_tab:
+    ds = dataset_status(cfg, pilot)
+    st.markdown(f"**File:** `{ds.path.relative_to(ROOT).as_posix()}`")
+    if ds.load_error:
+        st.error(f"Cannot load the dataset:\n\n```\n{ds.load_error}\n```")
     else:
-        kind = "MOCK ([CS] + English)" if tr.is_mock else "real"
-        st.markdown(f"**File:** `{path.relative_to(ROOT).as_posix()}` ({kind})")
-        st.markdown("**Rows by status:** " + ", ".join(f"{k}: {v}" for k, v in tr.status_counts.items()))
-        if tr.errors:
-            st.error(f"Not valid for the {mode.lower()} set:\n\n```\n{tr.errors}\n```")
+        st.caption(f"{ds.n_rows} rows · sha256 `{ds.sha256[:16]}…` · checks cover {ds.scope}")
+        fields = ", ".join(f"{lang}: `{f}`" for lang, f in cfg.text_fields.items())
+        st.markdown(f"**Text fields:** {fields}")
+        report = ds.report
+        assert report is not None
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {"check": c, "kind": "error" if c in ERROR_CHECKS else "warning", "tasks": len(report.ids(c)), "task ids": ", ".join(report.ids(c))}
+                    for c in (*ERROR_CHECKS, *WARNING_CHECKS)
+                ]
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+        if report.ok:
+            st.success("All hard checks pass: step 02 can build the prompts.")
         else:
-            st.success(f"Valid for the {mode.lower()} set.")
-        if tr.warnings:
-            with st.expander(f"{len(tr.warnings)} warnings (check, not blocking)"):
-                st.code("\n".join(tr.warnings), language=None)
-
-    st.divider()
-    st.markdown("#### Replace with the translators' file")
-    st.caption("Export the Google Sheet as .xlsx. The current file is backed up to outputs/tmp/translations_backups/ first.")
-    upload = st.file_uploader("translations.xlsx", type=["xlsx"])
-    if upload is not None and st.button("Replace translations file", type="primary"):
-        try:
-            sheets = pd.read_excel(upload, sheet_name=None, dtype=str, keep_default_na=False)
-            missing_sheets = {"docstrings", "instructions"} - set(sheets)
-            if missing_sheets:
-                raise TranslationError(f"the file has no sheet(s) {sorted(missing_sheets)}")
-            if path.exists():
-                BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, BACKUP_DIR / f"translations-{datetime.now():%Y%m%d-%H%M%S}.xlsx")
-            path.write_bytes(upload.getvalue())
-            st.success("Replaced. Run step 02 to rebuild the prompts.")
-            st.rerun()
-        except (TranslationError, ValueError) as exc:
-            st.error(f"Not replaced: {exc}")
-
-    template = ctx.translations_template_path
-    if template.exists():
-        st.download_button("Download empty template", template.read_bytes(), file_name=template.name)
-
-    with st.expander("Mock translations (for dry runs)"):
-        st.caption("Writes [CS] + English. Refuses to overwrite a file with real translations.")
-        if st.button("Create mock translations"):
-            try:
-                write_mock(RunContext(cfg))
-                st.success("Mock translations written.")
-                st.rerun()
-            except TranslationError as exc:
-                st.error(str(exc))
+            st.error("Step 02 will refuse to build prompts until these are fixed in the dataset file.")
+        issues = report.errors + report.warnings
+        if issues:
+            with st.expander(f"Details ({len(issues)} issues)"):
+                st.dataframe(
+                    pd.DataFrame([{"task": i.task_id, "language": i.language, "check": i.check, "detail": i.detail} for i in issues]),
+                    hide_index=True,
+                    width="stretch",
+                )
+        st.caption(
+            "Errors: every `>>>` line and the line after it must match the English text; the entry point and all "
+            "backticked identifiers must appear. Warnings: length ratio outside 0.6–1.8, English numbers missing."
+        )
 
 # --------------------------------------------------------------------------- results
 with results_tab:
@@ -262,18 +241,24 @@ with results_tab:
         left, right = st.columns(2)
         with left:
             st.markdown("**Pass rate** (model × language)")
-            st.dataframe(pass_rate_table(df).style.format("{:.1%}"), use_container_width=True)
+            st.dataframe(pass_rate_table(df).style.format("{:.1%}"), width="stretch")
         with right:
             st.markdown("**Status counts**")
             counts = df.groupby(["extraction_status", "exec_status"]).size().rename("rows").reset_index()
-            st.dataframe(counts, hide_index=True, use_container_width=True)
+            st.dataframe(counts, hide_index=True, width="stretch")
+
+        match_cols = [c for c in ("exact_match_canonical", "unchanged_from_buggy") if c in df]
+        if match_cols:
+            st.markdown("**Code comparison** (share of rows with usable code; AST-normalized, docstrings ignored)")
+            rates = df.groupby(["model", "language"])[match_cols].mean().reset_index()
+            st.dataframe(rates.style.format({c: "{:.1%}" for c in match_cols}), hide_index=True, width="stretch")
 
         f1, f2, f3 = st.columns(3)
         models = f1.multiselect("Model", sorted(df["model"].unique()), default=sorted(df["model"].unique()))
         langs = f2.multiselect("Language", sorted(df["language"].unique()), default=sorted(df["language"].unique()))
         statuses = f3.multiselect("Exec status", sorted(df["exec_status"].unique()), default=sorted(df["exec_status"].unique()))
         view = df[df["model"].isin(models) & df["language"].isin(langs) & df["exec_status"].isin(statuses)]
-        st.dataframe(view, hide_index=True, use_container_width=True, height=300)
+        st.dataframe(view, hide_index=True, width="stretch", height=300)
         st.download_button("Download results CSV", rctx.results_path.read_bytes(), file_name=rctx.results_path.name)
 
         st.markdown("#### Inspect one row")
@@ -289,6 +274,7 @@ with results_tab:
                 f"**extraction:** {row['extraction_status']} · **execution:** {row['exec_status']}"
                 + (f" ({exe.get('exc_type')})" if exe.get("exc_type") else "")
                 + f" · tokens in/out/reasoning: {resp.get('input_tokens')}/{resp.get('output_tokens')}/{resp.get('reasoning_tokens')}"
+                + f" · same as canonical: {ext.get('exact_match_canonical')} · unchanged from buggy: {ext.get('unchanged_from_buggy')}"
             )
             c1, c2 = st.columns(2)
             with c1:

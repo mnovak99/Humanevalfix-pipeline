@@ -22,6 +22,8 @@ COLUMNS = [
     "extraction_status",
     "exec_status",
     "passed",
+    "exact_match_canonical",
+    "unchanged_from_buggy",
     "input_tokens",
     "output_tokens",
     "reasoning_tokens",
@@ -30,18 +32,24 @@ COLUMNS = [
 
 
 def aggregate(tasks: list[dict], responses: list[dict], extracted: list[dict], executions: list[dict]) -> pd.DataFrame:
-    resp = pd.DataFrame(list(latest_by_key(responses).values()))
-    ext = pd.DataFrame(extracted)[KEY + ["extraction_status"]]
+    """One row per extracted record (step 04 already dropped records of older configurations)."""
+    token_cols = ["input_tokens", "output_tokens", "reasoning_tokens", "latency_s"]
+    resp = pd.DataFrame(list(latest_by_key(responses).values()))[KEY + token_cols]
+    ext = pd.DataFrame(extracted)[
+        KEY + ["task_id", "language", "extraction_status", "exact_match_canonical", "unchanged_from_buggy"]
+    ]
     exe = pd.DataFrame(executions)[KEY + ["exec_status"]]
     bug = pd.DataFrame([{"task_id": t["task_id"], "bug_type": t["bug_type"]} for t in tasks])
 
-    df = resp.merge(ext, on=KEY, how="left", validate="one_to_one")
+    df = ext.merge(resp, on=KEY, how="left", validate="one_to_one")
     df = df.merge(exe, on=KEY, how="left", validate="one_to_one")
     df = df.merge(bug, on="task_id", how="left", validate="many_to_one")
-    missing = df["extraction_status"].isna() | df["exec_status"].isna()
-    if missing.any():
-        raise ValueError(f"{int(missing.sum())} responses have no extraction/execution record; rerun steps 04-05")
+    if df["exec_status"].isna().any():
+        raise ValueError(f"{int(df['exec_status'].isna().sum())} records have no execution result; rerun step 05")
     df["passed"] = (df["exec_status"] == "passed").astype(int)
+    # 1/0, empty when there was no usable code to compare.
+    for col in ("exact_match_canonical", "unchanged_from_buggy"):
+        df[col] = df[col].map({True: 1, False: 0}).astype("Int64")
     for col in ("input_tokens", "output_tokens", "reasoning_tokens"):
         df[col] = df[col].astype("Int64")
     df = df[COLUMNS].copy()
@@ -66,6 +74,9 @@ def summary(df: pd.DataFrame) -> str:
         f"extraction failures (not ok/no_code_block): {int((~df['extraction_status'].isin(['ok', 'no_code_block'])).sum())}",
         "execution status:",
         execution.to_string(),
+        f"exact match with canonical: {int(df['exact_match_canonical'].sum())}, "
+        f"unchanged from buggy: {int(df['unchanged_from_buggy'].sum())} "
+        f"(of {int(df['exact_match_canonical'].notna().sum())} rows with usable code)",
     ]
     return "\n".join(lines)
 

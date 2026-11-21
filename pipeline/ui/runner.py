@@ -122,8 +122,6 @@ def pipeline_args(
     elif command == "step":
         assert step is not None
         args = ["run", "--step", step]
-    elif command == "mock-translations":
-        return ["mock-translations"]
     else:
         raise ValueError(f"unknown command {command!r}")
     if pilot and command != "smoke":

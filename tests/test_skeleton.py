@@ -33,7 +33,6 @@ def test_mode_paths_are_separate(tmp_path: Path) -> None:
         ["run", "--step", "01", "--pilot"],
         ["run", "--step", "03", "--dry-run"],
         ["run", "--all", "--pilot", "--dry-run"],
-        ["mock-translations"],
     ],
 )
 def test_cli_parses(argv: list[str]) -> None:

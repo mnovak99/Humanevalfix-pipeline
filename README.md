@@ -4,10 +4,11 @@ Research pipeline for the course *Experimental Methods in Software Engineering*.
 Research question: does the natural language of the prompt (English vs. Czech)
 affect how well an LLM fixes a bug in Python code?
 
-**Experimental invariant:** between language conditions only the instruction and
-the docstring *description* change. Code, identifiers and docstring examples
-(`>>>` lines and expected outputs) are byte-identical across languages; step 02
-asserts this.
+**Experimental invariant:** between the language conditions only the prompt text
+changes (the framing sentences and the task description). The code shown to the
+model (`declaration + buggy_solution`) is byte-identical in every language, and
+every `>>>` example with its expected output is identical in the English and Czech
+descriptions; step 02 checks both and stops otherwise.
 
 ## Setup
 
@@ -25,16 +26,16 @@ Double-click `start_ui.cmd` (or run `uv run python -m pipeline ui`). The UI open
 http://127.0.0.1:8501 and is reachable from this computer only.
 
 * **Overview**: which step files exist for the chosen task set (pilot/full, dry/live),
-  model-call progress, translation state.
+  model-call progress, whether the translation checks pass.
 * **Run**: run all steps, one step, or the smoke test. Runs are background processes with a
   live log; they keep going if the browser tab closes, and can be stopped from the sidebar.
   A live run shows the call count and estimated cost and starts only after you tick the
-  confirmation box; it is blocked while API keys are missing or translations are mock/invalid.
-* **Translations**: validation errors and warnings, replacing `data/translations.xlsx` with
-  the translators' export (the old file is backed up to `outputs/tmp/translations_backups/`),
-  downloading the empty template, creating mock translations.
-* **Results**: pass rate per model × language, status counts, a filterable table, CSV
-  download, and an inspector showing prompt, response, extracted code and stderr per row.
+  confirmation box; it is blocked while API keys are missing or translation checks fail.
+* **Dataset**: the dataset file, its hash, and the translation-check report (errors,
+  warnings, offending task ids, details) for the selected task set.
+* **Results**: pass rate and code-comparison rates per model × language, status counts, a
+  filterable table, CSV download, and an inspector showing prompt, response, extracted
+  code and stderr per row.
 
 Close the console window to stop the UI; stop a running pipeline run first.
 
@@ -44,7 +45,6 @@ Close the console window to stop the UI; stop a running pipeline run first.
 uv run python -m pipeline run --step 01 --pilot
 uv run python -m pipeline run --step 03 --dry-run
 uv run python -m pipeline run --all --pilot --dry-run
-uv run python -m pipeline mock-translations
 uv run python -m pipeline smoke              # EN-only check of the real APIs
 ```
 
@@ -59,114 +59,134 @@ All tunables live in `config.yaml`; API keys in `.env`.
 
 | Step | Reads | Writes |
 |------|-------|--------|
-| 01 prepare | HF `bigcode/humanevalpack` (python/test) | `data/tasks.json`, `data/translations_template.xlsx` |
-| 02 build prompts | `data/tasks.json`, `data/translations.xlsx` | `data/prompts.jsonl` |
+| 01 prepare | `data/humanevalpack_cs.jsonl` | `data/tasks.json` |
+| 02 build prompts | `data/tasks.json`, templates in `config.yaml` | `data/prompts.jsonl` |
 | 03 run models | `data/prompts.jsonl` | `outputs/responses.jsonl` |
-| 04 extract | `outputs/responses.jsonl` | `outputs/extracted.jsonl` |
+| 04 extract | `outputs/responses.jsonl`, `data/tasks.json` | `outputs/extracted.jsonl` |
 | 05 execute | `outputs/extracted.jsonl` | `outputs/executions.jsonl` |
 | 06 aggregate | all of the above | `outputs/results.csv` |
 
 ## Dataset
 
-`bigcode/humanevalpack`, config `python`, split `test` (164 tasks), pinned to HF
-commit `9a41762f` in `config.yaml`.
+`data/humanevalpack_cs.jsonl` is the pipeline's **only** data source: the 164
+HumanEvalPack Python tasks (HumanEvalFix) with all original fields plus
+`docstring_translated`, the team's reviewed Czech translation of `instruction`.
+The code and test fields (`prompt`, `declaration`, `canonical_solution`,
+`buggy_solution`, `test`) are byte-identical to `bigcode/humanevalpack`
+(config `python`, split `test`) at HF commit `9a41762f`; this was checked once
+when the file arrived.
+
+`data/raw/humanevalpack_original.jsonl` is the teammates' first version, kept for
+provenance and not read by the pipeline. It differs from the final file only in
+`docstring_translated` of 8 tasks (Python/10, 32, 37, 40, 49, 53, 81, 99), where
+review fixed translated function names in `>>>` lines, decimal commas, a wrong
+expected output and typos. The step-02 checks flag 7 of these as errors and the
+eighth (decimal commas in a table, Python/81) as a warning.
 
 Fields used:
 
 | Field | Use |
 |-------|-----|
 | `task_id` | task key (`Python/N`) |
-| `prompt` | imports + (helper functions) + entry-point signature and docstring |
-| `buggy_solution` | buggy body; code shown to the model = `prompt + buggy_solution` |
-| `canonical_solution` | sanity check only (`prompt + canonical_solution` must pass) |
+| `instruction` | English task description (in the EN prompt) |
+| `docstring_translated` | Czech task description (in the CS prompt) |
+| `declaration` | imports, helper functions and the entry-point signature (ends with a newline) |
+| `buggy_solution` | buggy body; code shown to the model = `declaration + buggy_solution` |
+| `canonical_solution` | sanity check and `exact_match_canonical` |
 | `test` | test harness; defines `check(f)` and already ends with `check(<entry_point>)` |
 | `entry_point` | function to fix / extract |
 | `bug_type` | sampling strata |
 
-Not used: `instruction` (a synthesis instruction, "Write a Python function …",
-that embeds the whole English docstring), `docstring`, `declaration`,
-`example_test`, `signature`, `failure_symptoms`, `import` and `test_setup`
-(the last two are empty for all Python tasks).
+Not used: `prompt`, `docstring`, `text`, `example_test`, `signature`, `failure_symptoms`.
 
-Program executed for a test = `preamble + code + test`, where `preamble` is the
-prompt without the entry-point function (imports and helper functions).
+Program executed for a test = `preamble + code + test`, where `preamble` is
+`declaration + buggy_solution` without the entry-point function (imports and
+helper functions).
+
+### Known limitations of the data
+
+* **English text inside the code part.** In Python/10, 32, 38 and 50 `declaration`
+  contains helper functions with English docstrings, and in Python/64 a module-level
+  string `FIX = """Add more test cases."""`. This text is part of the code, so it is
+  identical (English) in both language conditions. Python/10, 32 and 50 are in the
+  100-task sample (Python/32 also in the pilot).
+* **Czech word in an English description.** The `instruction` of Python/115 says
+  `Omezení:` instead of the original `Constraints:`. Python/115 is not in the sample.
+* `docstring` (not used) differs from HF in Python/41 (line break) and Python/142
+  (a stray `"` removed).
 
 ### Step 01 results (seed 42)
 
-* Sanity check: 164/164 tasks valid (canonical passes, buggy does not), 0 excluded.
-  Buggy statuses: 155 `failed`, 6 `error`, 3 `timeout` (Python/10, 156, 160).
+* Sanity check on exactly the code the model sees: `declaration + canonical_solution`
+  must pass and `declaration + buggy_solution` must fail. 164/164 tasks valid, 0
+  excluded. Buggy statuses: 155 `failed`, 6 `error`, 3 `timeout` (Python/10, 156, 160).
 * Stratified sample of 100 (proportional, largest remainder): excess logic 19,
   function misuse 5, missing logic 20, operator misuse 15, value misuse 27,
   variable misuse 14. The pilot is the first 20 of the same order and keeps the
-  ratios (4/1/4/3/5/3).
+  ratios (4/1/4/3/5/3). The task ids are the same as in the earlier HF-based sample.
+* `tasks.json` records the dataset path and its SHA-256.
 
-### Docstring split
+## Prompts and translation checks (step 02)
 
-The docstring is split into a translatable **description** and verbatim
-**examples**. Example lines are `>>>` sessions (with their expected output) and
-call-expression lines such as `f(x) ➞ y`, `f(x) == y`, `* f(x) => y`,
-`assert f(x) => y`, including multi-line calls. Each run of example lines is
-replaced in the description by a `{EXAMPLE_k}` marker line and re-inserted on
-rebuild, so examples are byte-identical across languages by construction.
-Indentation and the opening/closing quote layout are structural, not part of the
-description. Rebuilding with the English description reproduces the original
-code exactly (asserted for every task, including after an `.xlsx` round-trip).
+One template per language in `config.yaml` (`prompt_templates`); placeholders are
+dataset fields:
 
-Data written in prose (`Input: [4,2,3]` / `Output: [2, 1]`,
-`For num = "AB" the output should be 1.`) and comments between examples are
-part of the description: translators translate the words and copy the values.
+```text
+EN: I gave an AI this prompt, but the result doesn't really work. Could you please fix it?
+    Used prompt: {instruction}
+    Code: {declaration}{buggy_solution}
+    Return the complete corrected function in a single Python code block.
 
-Helper functions in the prompt (Python/10, 32, 50 in the sample) keep their
-English docstrings in every language; they are treated as code.
+CS: Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?
+    Použité zadání: {docstring_translated}
+    Kód: {declaration}{buggy_solution}
+    Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
+```
 
-## Translations and prompts (step 02)
+`text_fields` maps each language to the field with its description
+(`en: instruction`, `cs: docstring_translated`). Adding a language = a new field in
+the dataset, an entry in `languages`, `text_fields` and `prompt_templates`.
 
-`data/translations.xlsx` follows the contract in the template
-(`data/translations_template.xlsx`, sheets `docstrings`, `instructions`,
-`guide`). Until real translations exist, `python -m pipeline mock-translations`
-writes a mock file (`[CS] ` + EN, status `reviewed`); it refuses to overwrite a
-file with real translations unless `--force` is given. Prompts built from mock
-text are flagged `mock_translation: true` in `prompts.jsonl`, and live model runs
-refuse them.
+**Translation checks** (each non-English text against `instruction`; offending
+task ids are printed):
 
-Validation (errors stop the step, listing every offending task id):
-missing/duplicate/unknown task ids, empty cells, status other than `reviewed`,
-`docstring_en` not matching `tasks.json`, missing/reordered `{EXAMPLE_k}`
-markers, triple quotes, missing or empty instructions, and instruction
-placeholders differing from EN (`{entry_point}` is the only one allowed).
-Warnings: CS/EN prose length ratio outside 0.6–1.8, values from EN prose
-(numbers, quoted strings, `[...]` lists) not found verbatim in the translation,
-and new backslashes. A pilot run only needs the pilot rows to be complete.
+| Check | Kind |
+|-------|------|
+| every `>>>` line and the line right after it (expected output) identical, in order | error |
+| `entry_point` appears in the translation | error |
+| every backticked identifier from EN (e.g. the signature) appears | error |
+| length ratio translation/EN outside 0.6–1.8 | warning |
+| numbers from EN missing in the translation | warning |
 
-Prompt = instruction (with `{entry_point}` filled in) + blank line + a fenced
-` ```python ` block with the buggy code. **Invariant check:** for every task,
-the code with the docstring content removed must be byte-identical to the
-original in every language, every example block must appear verbatim and in
-order, and the rebuilt English code must equal the original exactly. Any
-violation stops the step.
+Current result: no errors; 2 warnings over all 164 tasks (Python/93, 123: numbers
+written out in words), 1 in the 100-task sample (Python/123), none in the pilot.
+
+**Invariant check:** every template must contain `{declaration}{buggy_solution}`
+exactly once, and each rendered prompt must contain that code exactly once, so the
+code part is byte-identical across languages. Any violation stops the step.
 
 `data/prompts.jsonl` fields: `prompt_id` (`<task_id>::<lang>`), `task_id`,
-`language`, `prompt`, `entry_point`, `mock_translation`.
+`language`, `prompt`, `entry_point`.
 
 ## Model calls (step 03)
 
 Every prompt × enabled model × run (1..`runs_per_prompt`) is one call; each
-result is appended to `outputs/responses*.jsonl` immediately. **Resume:** calls
-with a successful record are skipped; failed calls are retried on the next run
-(the latest record per `(prompt_id, model, run)` wins downstream). Retries use
+result is appended to `outputs/responses*.jsonl` immediately. Retries use
 exponential backoff with jitter for transient errors (429/5xx/network), up to
 `retry_max_attempts`; other errors become a `failed` record and the run goes on.
 No `temperature`/`top_p`/`top_k` is ever sent; `params` from `config.yaml` are
 passed through. Effort is `low` for every model.
 
-Each record stores the model `settings` it ran with (provider, `max_tokens`, `params`)
-and a `settings_hash`. Resume skips a call only if it succeeded **with the current
-settings**; after a config change the call is made again and the new record supersedes
-the old one, so results never mix configurations.
+Each record stores the model `settings` it ran with (provider, `max_tokens`,
+`params`), a `settings_hash` and a `prompt_hash`. **Resume** skips a call only if it
+succeeded with the current prompt text **and** settings; after a template or config
+change the call is made again. Steps 04–06 only use records that match the current
+prompts and settings, so results never mix configurations (older records stay in
+the file as history).
 
-A live (non-dry) run refuses prompts built from mock translations, then prints
-the number of calls and the estimated cost (`cost_estimate_tokens` per call ×
-`price_per_mtok`) and asks for confirmation unless `--yes`.
+A live (non-dry) run prints the number of calls and the estimated cost
+(`cost_estimate_tokens` per call × `price_per_mtok`) and asks for confirmation unless
+`--yes`.
 
 `--dry-run` uses a deterministic fake provider (hash of model + prompt) that
 returns, in fixed proportions: the canonical solution in a ` ```python ` block,
@@ -174,10 +194,10 @@ the buggy code unchanged, the canonical code without a fence, a syntax error, a
 wrong function name, an empty response, or a simulated API error — so every
 downstream status is exercised.
 
-Response record: `prompt_id, task_id, language, model, provider, run,
-timestamp` (UTC ISO), `attempts, status` (`ok`/`failed`), `error, text,
-model_reported, input_tokens, output_tokens, reasoning_tokens, latency_s,
-raw_meta`.
+Response record: `prompt_id, task_id, language, model, provider, run, settings,
+settings_hash, prompt_hash, timestamp` (UTC ISO), `attempts, status`
+(`ok`/`failed`), `error, text, model_reported, input_tokens, output_tokens,
+reasoning_tokens, latency_s, raw_meta`.
 
 ### Providers
 
@@ -192,8 +212,6 @@ retries are disabled (`max_retries=0`) so s03 owns the retry policy. Retryable:
 connection errors/timeouts and HTTP 408/409/429/5xx/529; everything else is a
 failed record. `output_tokens` includes thinking/reasoning tokens. Model-side
 metadata (stop reason / status, refusal details, request id) goes to `raw_meta`.
-Claude Haiku 5.5 runs adaptive thinking by default with effort `medium` when
-`params` is empty.
 
 ### Smoke test (real APIs, English only)
 
@@ -203,12 +221,11 @@ uv run python -m pipeline smoke --n-tasks 5
 uv run python -m pipeline smoke --dry-run    # same path with the fake provider
 ```
 
-Checks API keys, model ids and `params` before the experiment, without needing
-translations. It takes the first N tasks of `data/tasks.json`, builds the same
-English prompts as step 02 (tested to be identical) and runs steps 03–06 with one
-run per prompt. Same cost confirmation as a live run. Files: `data/prompts_smoke.jsonl`,
-`outputs/*_smoke.*`; they never mix with research data. Completed calls are
-skipped on a rerun; delete `outputs/responses_smoke.jsonl` to start over.
+Checks API keys, model ids and `params` before a paid experiment run. It takes the
+first N tasks of `data/tasks.json`, builds the same English prompts as step 02
+(tested to be identical) and runs steps 03–06 with one run per prompt. Same cost
+confirmation as a live run. Files: `data/prompts_smoke.jsonl`, `outputs/*_smoke.*`;
+they never mix with research data.
 
 ## Extraction (step 04)
 
@@ -219,36 +236,41 @@ a block. The code must `ast.parse` and define a top-level function named
 `syntax_error`, `function_missing`, `empty_response`, and `api_error` (the call
 itself failed). Usable for execution: `ok`, `no_code_block`.
 
+For usable code the step also compares the extracted entry-point function with the
+references after `ast.parse` → `ast.unparse` normalization, with docstrings removed
+(so formatting, comments and docstrings do not matter): `exact_match_canonical`
+(equals `declaration + canonical_solution`) and `unchanged_from_buggy` (equals
+`declaration + buggy_solution`).
+
 ## Execution (step 05)
 
-Program = `preamble` (the prompt's imports and helper functions) + extracted
-code (so the model's own definitions win) + dataset `test`. Each runs in a
-fresh `python -I -X utf8` subprocess with `exec_timeout_s`; on timeout the
-whole process tree is killed (`taskkill /T` on Windows). Statuses: `passed`,
-`failed` (AssertionError), `error` (other exception; type stored), `timeout`,
-`skipped` (no usable code). The last 500 characters of stderr are kept.
+Program = `preamble` + extracted code (so the model's own definitions win) +
+dataset `test`. Each runs in a fresh `python -I -X utf8` subprocess with
+`exec_timeout_s`; on timeout the whole process tree is killed (`taskkill /T` on
+Windows). Statuses: `passed`, `failed` (AssertionError), `error` (other exception;
+type stored), `timeout`, `skipped` (no usable code). The last 500 characters of
+stderr are kept.
 
 ## Results (step 06)
 
 `outputs/results*.csv`, one row per task × language × model × run:
-`task_id, bug_type, language, model, run, extraction_status, exec_status,
-passed, input_tokens, output_tokens, reasoning_tokens, latency_s`
-(`passed` is 1/0). The step prints pass rate per model × language and status
-counts; no statistics.
 
-Dataset quirk: in Python/115 the string literal comes after `import math`, so
-it is not a real docstring; it is still treated as the task description.
+`task_id, bug_type, language, model, run, extraction_status, exec_status, passed,
+exact_match_canonical, unchanged_from_buggy, input_tokens, output_tokens,
+reasoning_tokens, latency_s`
+
+The primary measure is test-based: `passed` (1/0; pass@1 per run).
+`exact_match_canonical` and `unchanged_from_buggy` are 1/0, and empty when there was
+no usable code. The step prints pass rate per model × language, status counts and
+the two comparison counts; no statistics.
 
 ## Status
 
-- [x] Phase 0: setup, config, CLI skeleton
-- [x] Phase 1: s01 + s05 executor (sampling, docstring split, sanity check);
-      s05 step wiring follows in Phase 3 together with s04
-- [x] Phase 2: mock translations + s02 (current `translations.xlsx` is the MOCK)
-- [x] Phase 3: s03 (fake provider) + s04 + s05 wiring + s06; `--all --pilot --dry-run` works end-to-end
-- [x] Web UI (Streamlit), effort low for all models
-- [x] Phase 4: real providers (Anthropic, OpenAI; Gemini disabled), offline-tested with
-      stubbed SDK clients; no paid calls made yet
+- [x] Phases 0–4: setup, sampling + executor, prompts, model runner (fake + real
+      providers), extraction, execution, aggregation
+- [x] Web UI (Streamlit), effort `low` for all models, EN-only smoke test
+- [x] Final dataset (`data/humanevalpack_cs.jsonl`) with new prompt templates,
+      translation checks and code-comparison columns; no paid calls made yet
 
 Note: `pydantic` is pinned to 2.12.5 because Windows Smart App Control blocks the
 newer `pydantic-core` DLL. Keep the pin unless the pipeline runs elsewhere (WSL/Linux).

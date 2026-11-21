@@ -5,172 +5,128 @@
 University research project (course "Experimental Methods in Software Engineering", team of 3).
 Research question: does the natural language of the prompt (English vs. Czech) affect how well an LLM fixes a bug in Python code?
 
-The experiment is a controlled one: **the only thing that changes between conditions is the language of the instruction and the docstring description.** The code, identifiers and docstring examples must stay byte-identical across languages. Protect this invariant everywhere.
+The experiment is a controlled one: **the only thing that changes between conditions is the prompt text (framing sentences + task description).** The code shown to the model (`declaration + buggy_solution`) must be byte-identical in every language, and every `>>>` example with its expected output must be identical in the English and Czech descriptions. Protect this invariant everywhere.
 
-My responsibility is the whole pipeline: data download → prompts → model calls → code extraction → test execution → `results.csv`. Translations and statistics are done by teammates and are out of scope, except for the file contracts below.
+My responsibility is the whole pipeline: dataset → prompts → model calls → code extraction → test execution → `results.csv`. Translations and statistics are done by teammates and are out of scope, except for the dataset contract below.
 
 ## Environment
 
-* Windows 11, PowerShell. No Docker.
-* Python 3.12 managed by `uv` (`uv init`, `uv add`, `uv run`). Commit `uv.lock`.
-* Git: initialize a local repo immediately and commit after every phase. A GitHub remote will be added later; do not create or push to any remote. Never write 'co-authored' in any commit or PR.
-* Paths: always use `pathlib`. Read/write all text files as UTF-8 explicitly (Windows defaults to cp1250).
+* Windows 11, PowerShell. No Docker. Windows Smart App Control is on: it blocks new, not-yet-reputable native DLLs (this is why `pydantic` is pinned to 2.12.5). Check that new compiled dependencies import before relying on them; never change Windows security settings.
+* Python 3.12 managed by `uv` (`uv add`, `uv run`). Commit `uv.lock`.
+* Git: commit after every change set. The GitHub remote `origin` exists; never push without my explicit OK. Never write 'co-authored' in any commit or PR.
+* Paths: always use `pathlib`. Read/write all text files as UTF-8 explicitly (Windows defaults to cp1250), with LF line endings (`pipeline/io.py`).
 
 ## Repository structure
 
 ```
 pipeline/
-  \_\_init\_\_.py
-  \_\_main\_\_.py        # CLI entry: python -m pipeline ...
-  config.py          # loads config.yaml + .env
-  s01\_prepare.py
-  s02\_build\_prompts.py
-  s03\_run\_models.py
-  s04\_extract.py
-  s05\_execute.py
-  s06\_aggregate.py
-  providers/         # anthropic, openai, gemini (optional), fake (dry-run)
-  docstrings.py      # split/rebuild docstring (description vs. examples)
+  __main__.py        # CLI entry: python -m pipeline ...
+  config.py          # loads config.yaml + .env, per-mode file paths
+  dataset.py         # loads data/humanevalpack_cs.jsonl (the only data source)
+  validation.py      # translation checks (EN instruction vs. each translation)
+  io.py              # UTF-8/LF file helpers
+  s01_prepare.py ... s06_aggregate.py
+  smoke.py           # EN-only check of the real APIs
+  providers/         # anthropic, openai, gemini (disabled), fake (dry-run)
+  ui/                # Streamlit web UI (app.py, data.py, runner.py)
 tests/
-data/                # tasks.json, translations.xlsx, prompts.jsonl
-outputs/             # responses.jsonl, extracted.jsonl, executions.jsonl, results.csv
+data/
+  humanevalpack_cs.jsonl          # dataset (input, from teammates)
+  raw/humanevalpack_original.jsonl  # teammates' first version, provenance only, never read
+  tasks*.json, prompts*.jsonl     # generated
+outputs/             # responses, extracted, executions, results (*.jsonl / *.csv)
 config.yaml
-.env.example
-README.md
+start_ui.cmd
 ```
 
-`.gitignore` must include `.env`, `.venv/`, `\_\_pycache\_\_/`, `outputs/tmp/`. Data and outputs (except temp files) ARE committed – they are part of the research record.
+`.gitignore` includes `.env`, `.venv/`, `__pycache__/`, `outputs/tmp/`, `.claude/`. Data and outputs (except temp files) ARE committed – they are part of the research record.
 
 ## Configuration (config.yaml)
 
-Everything tunable lives here, nothing hardcoded in modules:
+Everything tunable lives here, nothing hardcoded in modules: `seed` (42), `n_tasks` (100), `pilot_n_tasks` (20), `languages` ([en, cs]), `runs_per_prompt` (3), `exec_timeout_s`, worker counts, `retry_max_attempts`, `cost_estimate_tokens` (600 in / 2000 out), `dataset_path`, `text_fields`, `prompt_templates`, `models`.
 
-```yaml
-seed: 42
-n\_tasks: 100          # full run
-pilot\_n\_tasks: 20     # used with --pilot
-languages: \[en, cs]
-runs\_per\_prompt: 3
-exec\_timeout\_s: 10
-translations\_path: data/translations.xlsx
+* `text_fields`: language → dataset field with its task description (`en: instruction`, `cs: docstring_translated`).
+* `prompt_templates`: one template per language, placeholders are dataset fields:
+  * EN: `I gave an AI this prompt, but the result doesn't really work. Could you please fix it?` / `Used prompt: {instruction}` / `Code: {declaration}{buggy_solution}` / `Return the complete corrected function in a single Python code block.`
+  * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` / `Použité zadání: {docstring_translated}` / `Kód: {declaration}{buggy_solution}` / `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
+  * `declaration` already ends with a newline, so it is concatenated directly with `buggy_solution`.
+* Models: `claude-haiku-5-5` (anthropic) and `gpt-6-luna` (openai) enabled, `gemini-3.5-flash-lite` disabled. Effort is `low` for every model (`params` passthrough). Never send `temperature`, `top_p` or `top_k`.
 
-models:
-  - name: claude-haiku-5-5
-    provider: anthropic
-    enabled: true
-    max\_tokens: 4000
-    params: {}        # provider-specific passthrough, e.g. effort setting
-    price\_per\_mtok: {input: 0.10, output: 0.50}
-  - name: gpt-6-luna
-    provider: openai
-    enabled: true
-    max\_tokens: 4000
-    params: {reasoning: {effort: low}}
-    price\_per\_mtok: {input: 0.10, output: 0.50}
-  - name: gemini-3.5-flash-lite
-    provider: gemini
-    enabled: false    # fallback only
-    max\_tokens: 4000
-    params: {}
-    price\_per\_mtok: {input: 0.30, output: 2.50}
-```
-
-API keys come from `.env` (`ANTHROPIC\_API\_KEY`, `OPENAI\_API\_KEY`, `GEMINI\_API\_KEY`) via `python-dotenv`. Never print, log or commit keys. Provide `.env.example` with empty values.
+API keys come from `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) via `python-dotenv`. Never print, log or commit keys. `.env.example` has empty values.
 
 ## Data
 
-Source: Hugging Face dataset `bigcode/humanevalpack`, config `python`, split `test` (164 tasks, HumanEvalFix). Inspect the actual fields before relying on them (expected: `task\_id`, `prompt`, `declaration`, `docstring`, `canonical\_solution`, `buggy\_solution`, `bug\_type`, `entry\_point`, `test`, `example\_test`, `instruction`, ...). Document the fields you use in README.
+The **only** source is `data/humanevalpack_cs.jsonl`: the 164 HumanEvalPack Python tasks (HumanEvalFix) with all original fields plus `docstring_translated` = the team's reviewed Czech translation of `instruction`. Code/test fields are byte-identical to `bigcode/humanevalpack` (python/test) at HF commit `9a41762f`. Nothing in the pipeline downloads data or reads `data/raw/`.
+
+Fields used: `task_id`, `instruction` (EN text), `docstring_translated` (CS text), `declaration`, `buggy_solution`, `canonical_solution`, `test` (ends with `check(<entry_point>)`), `entry_point`, `bug_type`.
+
+Known limitations (documented in README): `declaration` of Python/10, 32, 38, 50 contains helper functions with English docstrings and Python/64 an English module-level string – identical in both languages, expected. The EN `instruction` of Python/115 contains a Czech word (`Omezení:`); not in the sample.
 
 ## Pipeline steps
 
 Each step reads the previous step's file and writes its own. Every step is idempotent and can be run alone.
 
-### s01\_prepare
+### s01_prepare
 
-* Load the dataset, sample `n\_tasks` with `seed`, stratified by `bug\_type` (proportional). Save `data/tasks.json` (full task records + split docstring parts).
-* **Sanity check every sampled task:** canonical solution must pass the tests, buggy solution must fail. Exclude tasks that violate this and log them (count + ids) – this goes into the paper's Methods.
-* Split each docstring into `description` (prose to translate) and `examples` (`>>>` lines and their expected outputs, kept verbatim). Must round-trip: rebuilding from parts with the original description gives the original code exactly – assert this.
-* Export `data/translations\_template.xlsx` (see contract below) with EN filled in and CS empty.
-* `--pilot` uses `pilot\_n\_tasks` (first N of the same seeded order, so pilot ⊂ full set).
+* Load the dataset; sanity check every task on exactly the code the model sees: `declaration + canonical_solution` must pass, `declaration + buggy_solution` must fail. Exclude violators and log them (count + ids) – this goes into the paper's Methods. Currently 164/164 valid.
+* Sample `n_tasks` with `seed`, stratified by `bug_type` (proportional, largest remainder), ordered so every prefix stays proportional. `--pilot` = first `pilot_n_tasks` of the same order (pilot ⊂ full set). The task ids must stay the same as the existing sample.
+* Save `data/tasks.json`: task records + `buggy_code`, `canonical_code`, `preamble` (imports/helpers), and meta (dataset path + SHA-256, excluded tasks, strata).
 
-### Translation file contract (data/translations.xlsx)
+### s02_build_prompts
 
-Teammates fill this in Google Sheets and export as .xlsx. Sheet `docstrings`:
+* **Translation checks** for each non-English language against `instruction`; fail hard with the offending task ids: every `>>>` line and the line right after it (expected output) identical and in order; `entry_point` appears in the translation; every backticked identifier from EN appears. Warn only: length ratio outside 0.6–1.8, numbers from EN missing.
+* Render one prompt per task and language from `prompt_templates`.
+* **Invariant check:** every template contains `{declaration}{buggy_solution}` exactly once and only uses dataset fields; each rendered prompt contains `declaration + buggy_solution` exactly once (so the code part is byte-identical across languages). Fail hard otherwise.
+* Output `data/prompts.jsonl`: `prompt_id` (`<task_id>::<lang>`), `task_id`, `language`, `prompt`, `entry_point`.
 
-| task\_id | docstring\_en | docstring\_cs | translated\_by | reviewed\_by | status | note |
+### s03_run_models
 
-Sheet `instructions`: one row per language, columns `language`, `instruction`.
+* One interface `ask(model_cfg, prompt) -> Response(text, model_reported, input_tokens, output_tokens, reasoning_tokens, latency_s, raw_meta)`; one implementation per provider using official SDKs; SDK built-in retries disabled. Check current SDK docs for parameter shapes; do not guess.
+* Iterate prompt × enabled model × run; append each result to `outputs/responses.jsonl` immediately with UTC timestamp, model settings, `settings_hash` and `prompt_hash`.
+* **Resume:** skip a call only if it succeeded with the current prompt text and model settings. Steps 04–06 use only records matching the current prompts and settings, so configurations never mix.
+* Retries with `tenacity` (exponential backoff on 429/5xx/network, max 6 attempts); non-retryable errors become failed records.
+* **Fake provider** for `--dry-run` (deterministic mix of correct, buggy and broken answers).
+* **Live safety:** a real run prints the number of calls and estimated cost and asks for confirmation unless `--yes`.
 
-* Status values: `todo`, `translated`, `reviewed`. Only `reviewed` rows are allowed in a live run.
-* Adding a language later (e.g. `sk`) = new column `docstring\_sk` + new row in `instructions` + entry in `languages`. No code changes.
-* **Until real translations exist:** a command `python -m pipeline mock-translations` creates a mock `translations.xlsx` where CS = `"\[CS] " + EN` and status = `reviewed`, so the whole pipeline can be tested end-to-end. Switching to real translations = replacing the file. Live runs must refuse to run if any CS text starts with `\[CS] `.
+### s04_extract
 
-### s02\_build\_prompts
+* Code = last ```python block, else any fenced block, else whole text; `ast.parse` and find the top-level function `entry_point`.
+* Status: `ok`, `no_code_block`, `syntax_error`, `function_missing`, `empty_response`, `api_error`.
+* For usable code compare the extracted function after `ast.parse` → `ast.unparse` normalization with docstrings removed: `exact_match_canonical` (vs. `declaration + canonical_solution`), `unchanged_from_buggy` (vs. `declaration + buggy_solution`).
 
-* Load and validate translations: all task\_ids present and no extras, no empty cells, all `reviewed` (else fail with a list of offending ids), warn if CS/EN length ratio is outside 0.6–1.8.
-* Build the code shown to the model: buggy function with the docstring description replaced by the target-language text, examples unchanged.
-* **Invariant check:** the code with the docstring removed must be identical across languages. Fail hard otherwise.
-* Prompt = `instruction` + blank line + fenced ```python code block. Same template for every language.
-* Output `data/prompts.jsonl`: `prompt\_id`, `task\_id`, `language`, `prompt`, `entry\_point`.
+### s05_execute
 
-### s03\_run\_models
+* Program = preamble + extracted code + dataset `test`; separate subprocess with `exec_timeout_s`; on Windows the whole process tree is killed on timeout. Same executor as s01's sanity check.
+* Status: `passed`, `failed` (AssertionError), `error` (exception type stored), `timeout`, `skipped`. Stderr tail (max 500 chars).
 
-* One interface `ask(model\_cfg, prompt) -> Response(text, model\_reported, input\_tokens, output\_tokens, reasoning\_tokens, latency\_s, raw\_meta)`; one implementation per provider using official SDKs (`anthropic`, `openai`, `google-genai`). Pass `params` from config through. **Never send `temperature`, `top\_p` or `top\_k`** – current models reject or ignore them. Check current SDK docs for the exact effort/reasoning parameter shape; do not guess.
-* Iterate prompt × enabled model × run (1..runs\_per\_prompt). Append each result to `outputs/responses.jsonl` immediately, with timestamp (UTC ISO) and the configured model id.
-* **Resume:** on start, load existing (prompt\_id, model, run) keys and skip them.
-* Retries with `tenacity`: exponential backoff on 429/5xx/network errors, max 6 attempts; non-retryable errors are logged as a failed record, not crash the run.
-* **Fake provider** for `--dry-run`: returns the canonical solution in a code block for some prompts and garbage for others (deterministic), so steps 04–06 can be tested without API calls.
-* **Live safety:** a real (non-dry) run first prints the number of calls and estimated cost from `price\_per\_mtok` (assume 600 input / 2000 output tokens per call) and asks for confirmation unless `--yes`.
-* Show progress with `tqdm`.
+### s06_aggregate
 
-### s04\_extract
+* `outputs/results.csv` (UTF-8, comma), one row per task × language × model × run:
+`task_id, bug_type, language, model, run, extraction_status, exec_status, passed, exact_match_canonical, unchanged_from_buggy, input_tokens, output_tokens, reasoning_tokens, latency_s`
+(`passed` is 1/0 = pass@1 per run, the primary measure; the two comparison columns are 1/0, empty without usable code.)
+* Print a short sanity summary. No statistical tests – teammates do that.
 
-* Extract code from the response: last ```python block, else any fenced block, else whole text.
-* `ast.parse` it and find the function named `entry\_point`.
-* Status: `ok`, `no\_code\_block` (used whole text and it parsed), `syntax\_error`, `function\_missing`, `empty\_response`. Keep extracted code in `outputs/extracted.jsonl`.
-
-### s05\_execute
-
-* For each extracted record with usable code: write a temp file (`outputs/tmp/`) = needed imports + extracted code + the dataset `test` + the call that runs it (verify how `check(...)` is invoked in this dataset).
-* Run with `subprocess.run(\[sys.executable, file], timeout=exec\_timeout\_s, capture\_output=True)`. On Windows make sure a timed-out process (and its children) is actually killed.
-* Status: `passed`, `failed` (AssertionError), `error` (other exception; store exception type), `timeout`, `skipped` (no usable code). Save stderr tail (max 500 chars) for debugging.
-* The same executor is used by s01's sanity check – one implementation.
-* Execution may run in parallel (`concurrent.futures`, small pool).
-
-### s06\_aggregate
-
-* Write `outputs/results.csv` (UTF-8, comma), one row per task × language × model × run:
-`task\_id, bug\_type, language, model, run, extraction\_status, exec\_status, passed, input\_tokens, output\_tokens, reasoning\_tokens, latency\_s`
-(`passed` is 1/0.)
-* Print a short sanity summary: pass rate per model × language, count of extraction failures. No statistical tests – teammates do that.
-
-## CLI
+## CLI and UI
 
 ```
-uv run python -m pipeline run --step 01 \[--pilot]
+uv run python -m pipeline run --step 01 [--pilot]
 uv run python -m pipeline run --step 03 --dry-run
 uv run python -m pipeline run --all --pilot --dry-run
-uv run python -m pipeline mock-translations
+uv run python -m pipeline smoke [--n-tasks N] [--dry-run]
+uv run python -m pipeline ui          # or double-click start_ui.cmd
 ```
 
-Use `argparse` or `typer`. `--pilot` and `--dry-run` must write to separate output files (e.g. suffix `\_pilot`, `\_dry`) so test runs never mix with real data.
+`--pilot`, `--dry-run` and smoke runs write to separate files (suffixes `_pilot`, `_dry`, `_smoke`) so test runs never mix with real data. The web UI (127.0.0.1 only) runs the same CLI in a background process and requires an explicit confirmation for paid runs.
 
 ## Code style
 
 * English everywhere (code, comments, README, commit messages).
 * Comments short and only where logic is non-obvious. No restating what the code says.
 * Type hints, small functions, dataclasses for records. Standard `logging`, no print debugging left in.
-* `pytest` tests for: docstring split/rebuild round-trip, invariant check in s02, code extraction cases, executor statuses (pass/fail/error/timeout).
+* `pytest` tests for: translation checks, prompt templates and the invariant check, code extraction and comparison, executor statuses, resume rules, providers (stubbed SDK clients), UI basics.
 
 ## Working mode
 
-Work in phases. After each phase: run the tests, commit, show me a short summary and **wait for my review** before continuing.
+After each change set: run the tests, commit, show me a short summary and **wait for my review** before continuing. Do not make any paid API call without my explicit OK.
 
-1. **Phase 0 – setup:** uv project, dependencies, git init, `.gitignore`, `.env.example`, config, CLI skeleton.
-2. **Phase 1 – s01 + s05:** dataset loading, sampling, docstring split, executor, sanity check (canonical passes / buggy fails). Report how many tasks passed the check.
-3. **Phase 2 – mock translations + s02.**
-4. **Phase 3 – s03 (fake provider first) + s04 + s06:** full `--all --pilot --dry-run` run must work end-to-end.
-5. **Phase 4 – real providers:** implement Anthropic and OpenAI (Gemini optional, disabled). Do not make any paid API call without my explicit OK.
-
-Never modify task code, test code or docstring examples. If something in the dataset looks wrong, report it instead of "fixing" it.
-
+Never modify task code, test code, docstring examples or the dataset file. If something in the dataset looks wrong, report it instead of "fixing" it.

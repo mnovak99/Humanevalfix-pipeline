@@ -9,13 +9,19 @@ import sys
 from collections.abc import Callable
 
 from pipeline.config import MissingApiKey, RunContext, load_config, load_env
-from pipeline.docstrings import DocstringError
-from pipeline.s02_build_prompts import InvariantError
+from pipeline.dataset import DatasetError
+from pipeline.s02_build_prompts import InvariantError, TranslationCheckError
 from pipeline.s03_run_models import LiveRunRefused
-from pipeline.translations import TranslationError
 
 # Expected, user-facing failures: report the message, no traceback.
-PipelineError = (TranslationError, DocstringError, InvariantError, LiveRunRefused, MissingApiKey, FileNotFoundError)
+PipelineError = (
+    DatasetError,
+    TranslationCheckError,
+    InvariantError,
+    LiveRunRefused,
+    MissingApiKey,
+    FileNotFoundError,
+)
 
 STEPS: dict[str, str] = {
     "01": "pipeline.s01_prepare",
@@ -79,9 +85,6 @@ def build_parser() -> argparse.ArgumentParser:
     ui = sub.add_parser("ui", help="open the web UI (local only, http://127.0.0.1:8501)")
     ui.add_argument("--port", type=int, default=8501)
     ui.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
-
-    mock = sub.add_parser("mock-translations", help="create a mock data/translations.xlsx ([CS] + EN)")
-    mock.add_argument("--force", action="store_true", help="overwrite a file that contains real translations")
     return parser
 
 
@@ -92,17 +95,12 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    for noisy in ("httpx", "httpx2", "huggingface_hub", "datasets", "filelock", "fsspec"):
+    for noisy in ("httpx", "httpx2"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     load_env()
     config = load_config()
 
     try:
-        if args.command == "mock-translations":
-            from pipeline import translations
-
-            translations.write_mock(RunContext(config=config), force=args.force)
-            return 0
         if args.command == "ui":
             return run_ui(args.port, open_browser=not args.no_browser)
         if args.command == "smoke":

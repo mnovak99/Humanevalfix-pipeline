@@ -4,21 +4,36 @@ pilot_n_tasks: 20     # used with --pilot (first N of the same seeded order)
 languages: [en, cs]
 runs_per_prompt: 3
 exec_timeout_s: 10
-translations_path: data/translations.xlsx
 exec_workers: 4       # parallel test executions
 api_workers: 4        # parallel model calls
 retry_max_attempts: 6
 # Per-call token assumption for the pre-run cost estimate.
 cost_estimate_tokens: {input: 600, output: 2000}
-# Pre-filled EN instruction in the translations template ({entry_point} is substituted in s02).
-# Same wording as the original HumanEvalFix setup (bigcode-evaluation-harness).
-instruction_template_en: "Fix bugs in {entry_point}."
 
-dataset:
-  name: bigcode/humanevalpack
-  config: python
-  split: test
-  revision: 9a41762f73a8cb23bb5811b73d5aab164efcf378   # pinned HF commit (2025-08-19)
+# The only data source: HumanEvalPack (python/test, 164 tasks) with the team's reviewed
+# Czech translation of `instruction` in `docstring_translated`. Code fields are identical to
+# bigcode/humanevalpack at HF commit 9a41762f73a8cb23bb5811b73d5aab164efcf378.
+dataset_path: data/humanevalpack_cs.jsonl
+
+# Field holding the task description in each language (validated against `en` in step 02).
+text_fields:
+  en: instruction
+  cs: docstring_translated
+
+# One prompt template per language. Placeholders are dataset fields. The code part
+# `{declaration}{buggy_solution}` must be the same in every template (checked in step 02);
+# `declaration` already ends with a newline.
+prompt_templates:
+  en: |-
+    I gave an AI this prompt, but the result doesn't really work. Could you please fix it?
+    Used prompt: {instruction}
+    Code: {declaration}{buggy_solution}
+    Return the complete corrected function in a single Python code block.
+  cs: |-
+    Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?
+    Použité zadání: {docstring_translated}
+    Kód: {declaration}{buggy_solution}
+    Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
 
 models:
   - name: claude-haiku-5-5

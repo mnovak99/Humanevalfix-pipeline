@@ -1,6 +1,8 @@
 import pytest
 
 from pipeline.s04_extract import (
+    compare_to_references,
+    normalized_function,
     EMPTY_RESPONSE,
     FUNCTION_MISSING,
     NO_CODE_BLOCK,
@@ -59,3 +61,28 @@ def test_keeps_imports_and_helpers() -> None:
 def test_indented_fence_in_markdown_list() -> None:
     ex = extract(f"1. Fix:\n   ```python\n{FIXED}   ```\n", "add")
     assert ex.status == OK
+
+
+# --- comparison with reference solutions (exact_match_canonical / unchanged_from_buggy)
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        # canonical fix with a docstring, a comment and different formatting
+        ('def add(x: int, y: int) -> int:\n    """Add."""\n    # fixed\n    return (x +   y)\n', (True, False)),
+        ("def add(x: int, y: int) -> int:\n    return x - y\n", (False, True)),  # bug left in place
+        ("def add(x: int, y: int) -> int:\n    return y + x\n", (False, False)),  # different but valid fix
+        ("import math\n\ndef add(x: int, y: int) -> int:\n    return x + y\n", (True, False)),  # extra imports ok
+        ("def plus(x, y):\n    return x + y\n", (None, None)),  # entry point missing
+        (None, (None, None)),  # no usable code
+    ],
+)
+def test_compare_to_references(task: dict, code: str | None, expected: tuple) -> None:
+    assert compare_to_references(code, task) == expected
+
+
+def test_normalized_function_strips_nested_docstrings() -> None:
+    a = 'def f():\n    """Outer."""\n    def g():\n        """Inner."""\n        return 1\n    return g()\n'
+    b = "def f():\n    def g():\n        return 1\n    return g()\n"
+    assert normalized_function(a, "f") == normalized_function(b, "f")
