@@ -5,7 +5,7 @@
 University research project (course "Experimental Methods in Software Engineering", team of 3).
 Research question: does the natural language of the prompt (English vs. Czech) affect how well an LLM fixes a bug in Python code?
 
-The experiment is a controlled one: **the only thing that changes between conditions is the prompt text (framing sentences + task description).** The code shown to the model (`declaration + buggy_solution`) must be byte-identical in every language, and every `>>>` example with its expected output must be identical in the English and Czech descriptions. Protect this invariant everywhere.
+The experiment is a controlled one: **the only thing that changes between conditions is the prompt text (framing sentences + task description).** The code shown to the model (`declaration + buggy_solution`, trailing newlines removed) must be byte-identical in every language, and every `>>>` example with its expected output must be identical in the English and Czech descriptions. Protect this invariant everywhere.
 
 My responsibility is the whole pipeline: dataset → prompts → model calls → code extraction → test execution → `results.csv`. Translations and statistics are done by teammates and are out of scope, except for the dataset contract below.
 
@@ -47,9 +47,9 @@ Everything tunable lives here, nothing hardcoded in modules: `seed` (42), `n_tas
 
 * `text_fields`: language → dataset field with its task description (`en: instruction`, `cs: docstring_translated`).
 * `prompt_templates`: one template per language as a YAML literal block (`|-`, never folded `>`), placeholders are dataset fields. Layout (one blank line between sections; description and code each start on their own line):
-  * EN: `I gave an AI this prompt, but the result doesn't really work. Could you please fix it?` ⏎⏎ `Used prompt:` ⏎ `{instruction}` ⏎⏎ `Code:` ⏎ `{declaration}{buggy_solution}` ⏎ `Return the complete corrected function in a single Python code block.`
-  * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` ⏎⏎ `Použité zadání:` ⏎ `{docstring_translated}` ⏎⏎ `Kód:` ⏎ `{declaration}{buggy_solution}` ⏎ `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
-  * `declaration` and `buggy_solution` already end with a newline, so the code is followed by a single template line break. Inserted fields are never modified (no stripping); a test asserts the exact Python/23 prompts in both languages.
+  * EN: `I gave an AI this prompt, but the result doesn't really work. Could you please fix it?` ⏎⏎ `Used prompt:` ⏎ `{instruction}` ⏎⏎ `Code:` ⏎ `{declaration}` ⏎ `{buggy_solution}` ⏎⏎ `Return the complete corrected function in a single Python code block.`
+  * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` ⏎⏎ `Použité zadání:` ⏎ `{docstring_translated}` ⏎⏎ `Kód:` ⏎ `{declaration}` ⏎ `{buggy_solution}` ⏎⏎ `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
+  * Every field is inserted with trailing newlines removed (`rstrip("\n")`), nothing else changed, so the template alone sets the spacing (exactly one blank line between sections). The template supplies the line break between `declaration` and `buggy_solution`; step 02 checks that the code shown equals `declaration + buggy_solution` minus trailing newlines. Tests assert the exact Python/23 prompts and that no prompt has `"\n\n\n"` outside the code (25 declarations have PEP 8 blank lines inside, which are task code and stay).
 * Models: `claude-haiku-5-5` (anthropic) and `gpt-6-luna` (openai) enabled, `gemini-3.5-flash-lite` disabled. Effort is `low` for every model (`params` passthrough). Never send `temperature`, `top_p` or `top_k`.
 
 API keys come from `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) via `python-dotenv`. Never print, log or commit keys. `.env.example` has empty values.
@@ -76,7 +76,7 @@ Each step reads the previous step's file and writes its own. Every step is idemp
 
 * **Translation checks** for each non-English language against `instruction`; fail hard with the offending task ids: every `>>>` line and the line right after it (expected output) identical and in order; `entry_point` appears in the translation; every backticked identifier from EN appears. Warn only: length ratio outside 0.6–1.8, numbers from EN missing.
 * Render one prompt per task and language from `prompt_templates`.
-* **Invariant check:** every template contains `{declaration}{buggy_solution}` exactly once and only uses dataset fields; each rendered prompt contains `declaration + buggy_solution` exactly once (so the code part is byte-identical across languages). Fail hard otherwise.
+* **Invariant check:** every template contains `{declaration}` + line break + `{buggy_solution}` exactly once and only uses dataset fields; each rendered prompt contains the code (`declaration + buggy_solution` minus trailing newlines) exactly once (so the code part is byte-identical across languages). Fail hard otherwise.
 * Output `data/prompts.jsonl`: `prompt_id` (`<task_id>::<lang>`), `task_id`, `language`, `prompt`, `entry_point`.
 
 ### s03_run_models

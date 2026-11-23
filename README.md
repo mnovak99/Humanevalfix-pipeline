@@ -138,7 +138,9 @@ Used prompt:
 {instruction}
 
 Code:
-{declaration}{buggy_solution}
+{declaration}
+{buggy_solution}
+
 Return the complete corrected function in a single Python code block.
 ```
 
@@ -149,19 +151,30 @@ Použité zadání:
 {docstring_translated}
 
 Kód:
-{declaration}{buggy_solution}
+{declaration}
+{buggy_solution}
+
 Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
 ```
 
 The templates are YAML literal blocks (`|-`), so line breaks and blank lines are kept
-exactly; a test checks the rendered Python/23 prompts character by character. One
-blank line separates the sections; the description and the code each start on their
-own line. `buggy_solution` already ends with a newline, which gives the blank line
-before the closing sentence. Inserted fields are never modified, so irregular field
-endings show up as extra whitespace: `docstring_translated` of Python/3 (pilot) and
-Python/6 ends with a newline (one more blank line before `Kód:` than in English), and
-13 `buggy_solution` fields end with extra spaces or blank lines (Python/76, 88, 95,
-99, 117, 132, 146, 153 in the sample; identical in both languages).
+exactly; a test checks the rendered Python/23 prompts character by character.
+
+Every field is inserted with its **trailing newlines removed** (`rstrip("\n")`;
+nothing else inside a field changes), so the template alone sets the spacing: exactly
+one blank line between sections, and the description and the code each start on their
+own line. Because `declaration` loses its final newline, the template puts the line
+break between `{declaration}` and `{buggy_solution}` back; step 02 checks for every task
+that the code shown equals `declaration + buggy_solution` minus trailing newlines.
+Before stripping, trailing newlines produced double blank lines in Python/3 (CS
+`docstring_translated`) and in Python/99, 117, 153 (`buggy_solution`, both languages).
+
+A test asserts that no prompt contains `"\n\n\n"` outside the code. Inside the code it
+can occur: 25 `declaration` fields (15 in the sample) have PEP 8 blank lines between
+the imports and the function, e.g. Python/0 `from typing import List\n\n\ndef ...`;
+this is task code and is left unchanged (identical in both languages). Trailing spaces
+are kept too (e.g. `buggy_solution` of Python/76 ends with `" \n"` → the code's last
+line ends with a space).
 
 `text_fields` maps each language to the field with its description
 (`en: instruction`, `cs: docstring_translated`). Adding a language = a new field in
@@ -181,9 +194,10 @@ task ids are printed):
 Current result: no errors; 2 warnings over all 164 tasks (Python/93, 123: numbers
 written out in words), 1 in the 100-task sample (Python/123), none in the pilot.
 
-**Invariant check:** every template must contain `{declaration}{buggy_solution}`
-exactly once, and each rendered prompt must contain that code exactly once, so the
-code part is byte-identical across languages. Any violation stops the step.
+**Invariant check:** every template must contain `{declaration}` + line break +
+`{buggy_solution}` exactly once, and each rendered prompt must contain the code
+(`declaration + buggy_solution` without trailing newlines) exactly once, so the code
+part is byte-identical across languages. Any violation stops the step.
 
 `data/prompts.jsonl` fields: `prompt_id` (`<task_id>::<lang>`), `task_id`,
 `language`, `prompt`, `entry_point`.

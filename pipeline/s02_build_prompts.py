@@ -12,7 +12,9 @@ from pipeline.validation import ValidationReport, validate
 
 log = logging.getLogger(__name__)
 
-CODE_PLACEHOLDER = "{declaration}{buggy_solution}"
+# Fields are inserted without trailing newlines, so the template supplies the line break
+# between the signature (`declaration`) and the body (`buggy_solution`).
+CODE_PLACEHOLDER = "{declaration}\n{buggy_solution}"
 
 
 class InvariantError(ValueError):
@@ -54,13 +56,31 @@ def check_templates(cfg: Config, sample_task: dict) -> None:
             raise InvariantError(f"template {lang!r} uses fields not in the dataset: {sorted(unknown)}")
 
 
+def template_values(task: dict) -> dict:
+    """Task fields as inserted into templates: trailing newlines removed, nothing else changed.
+
+    The template then controls all spacing between sections (exactly one blank line).
+    """
+    return {k: v.rstrip("\n") if isinstance(v, str) else v for k, v in task.items()}
+
+
 def render(template: str, task: dict) -> str:
-    return template.format(**task)
+    return template.format(**template_values(task))
+
+
+def code_part(task: dict) -> str:
+    """The code shown to the model: `declaration + buggy_solution` without trailing newlines."""
+    values = template_values(task)
+    code = CODE_PLACEHOLDER.format(declaration=values["declaration"], buggy_solution=values["buggy_solution"])
+    # The template's line break must stand in for exactly the one newline `declaration` ended with.
+    if code != (task["declaration"] + task["buggy_solution"]).rstrip("\n"):
+        raise InvariantError(f"{task['task_id']}: declaration does not end with exactly one newline")
+    return code
 
 
 def check_invariant(task: dict, prompts: dict[str, str]) -> None:
     """The code part must appear once, byte-identical, in every language's prompt."""
-    code = task["declaration"] + task["buggy_solution"]
+    code = code_part(task)
     for lang, text in prompts.items():
         if text.count(code) != 1:
             raise InvariantError(f"{task['task_id']} [{lang}]: code part not found exactly once in the prompt")
