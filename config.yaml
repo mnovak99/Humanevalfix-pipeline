@@ -21,18 +21,28 @@ text_fields:
   cs: docstring_translated
 
 # One prompt template per language. Placeholders are dataset fields. The code part
-# `{declaration}{buggy_solution}` must be the same in every template (checked in step 02);
-# `declaration` already ends with a newline.
+# `{declaration}{buggy_solution}` must be the same in every template (checked in step 02).
+# Literal blocks (|-) keep line breaks and blank lines exactly. `declaration` and
+# `buggy_solution` already end with a newline, so a single line break after the code
+# gives one blank line before the closing sentence.
 prompt_templates:
   en: |-
     I gave an AI this prompt, but the result doesn't really work. Could you please fix it?
-    Used prompt: {instruction}
-    Code: {declaration}{buggy_solution}
+
+    Used prompt:
+    {instruction}
+
+    Code:
+    {declaration}{buggy_solution}
     Return the complete corrected function in a single Python code block.
   cs: |-
     Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?
-    Použité zadání: {docstring_translated}
-    Kód: {declaration}{buggy_solution}
+
+    Použité zadání:
+    {docstring_translated}
+
+    Kód:
+    {declaration}{buggy_solution}
     Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
 
 models:

@@ -46,10 +46,10 @@ start_ui.cmd
 Everything tunable lives here, nothing hardcoded in modules: `seed` (42), `n_tasks` (100), `pilot_n_tasks` (20), `languages` ([en, cs]), `runs_per_prompt` (3), `exec_timeout_s`, worker counts, `retry_max_attempts`, `cost_estimate_tokens` (600 in / 2000 out), `dataset_path`, `text_fields`, `prompt_templates`, `models`.
 
 * `text_fields`: language → dataset field with its task description (`en: instruction`, `cs: docstring_translated`).
-* `prompt_templates`: one template per language, placeholders are dataset fields:
-  * EN: `I gave an AI this prompt, but the result doesn't really work. Could you please fix it?` / `Used prompt: {instruction}` / `Code: {declaration}{buggy_solution}` / `Return the complete corrected function in a single Python code block.`
-  * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` / `Použité zadání: {docstring_translated}` / `Kód: {declaration}{buggy_solution}` / `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
-  * `declaration` already ends with a newline, so it is concatenated directly with `buggy_solution`.
+* `prompt_templates`: one template per language as a YAML literal block (`|-`, never folded `>`), placeholders are dataset fields. Layout (one blank line between sections; description and code each start on their own line):
+  * EN: `I gave an AI this prompt, but the result doesn't really work. Could you please fix it?` ⏎⏎ `Used prompt:` ⏎ `{instruction}` ⏎⏎ `Code:` ⏎ `{declaration}{buggy_solution}` ⏎ `Return the complete corrected function in a single Python code block.`
+  * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` ⏎⏎ `Použité zadání:` ⏎ `{docstring_translated}` ⏎⏎ `Kód:` ⏎ `{declaration}{buggy_solution}` ⏎ `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
+  * `declaration` and `buggy_solution` already end with a newline, so the code is followed by a single template line break. Inserted fields are never modified (no stripping); a test asserts the exact Python/23 prompts in both languages.
 * Models: `claude-haiku-5-5` (anthropic) and `gpt-6-luna` (openai) enabled, `gemini-3.5-flash-lite` disabled. Effort is `low` for every model (`params` passthrough). Never send `temperature`, `top_p` or `top_k`.
 
 API keys come from `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) via `python-dotenv`. Never print, log or commit keys. `.env.example` has empty values.

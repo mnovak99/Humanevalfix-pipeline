@@ -132,16 +132,36 @@ One template per language in `config.yaml` (`prompt_templates`); placeholders ar
 dataset fields:
 
 ```text
-EN: I gave an AI this prompt, but the result doesn't really work. Could you please fix it?
-    Used prompt: {instruction}
-    Code: {declaration}{buggy_solution}
-    Return the complete corrected function in a single Python code block.
+I gave an AI this prompt, but the result doesn't really work. Could you please fix it?
 
-CS: Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?
-    Použité zadání: {docstring_translated}
-    Kód: {declaration}{buggy_solution}
-    Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
+Used prompt:
+{instruction}
+
+Code:
+{declaration}{buggy_solution}
+Return the complete corrected function in a single Python code block.
 ```
+
+```text
+Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?
+
+Použité zadání:
+{docstring_translated}
+
+Kód:
+{declaration}{buggy_solution}
+Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.
+```
+
+The templates are YAML literal blocks (`|-`), so line breaks and blank lines are kept
+exactly; a test checks the rendered Python/23 prompts character by character. One
+blank line separates the sections; the description and the code each start on their
+own line. `buggy_solution` already ends with a newline, which gives the blank line
+before the closing sentence. Inserted fields are never modified, so irregular field
+endings show up as extra whitespace: `docstring_translated` of Python/3 (pilot) and
+Python/6 ends with a newline (one more blank line before `Kód:` than in English), and
+13 `buggy_solution` fields end with extra spaces or blank lines (Python/76, 88, 95,
+99, 117, 132, 146, 153 in the sample; identical in both languages).
 
 `text_fields` maps each language to the field with its description
 (`en: instruction`, `cs: docstring_translated`). Adding a language = a new field in
