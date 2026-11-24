@@ -112,7 +112,14 @@ class Runner:
 
 
 def pipeline_args(
-    command: str, *, pilot: bool = False, dry_run: bool = False, yes: bool = False, step: str | None = None, n_tasks: int | None = None
+    command: str,
+    *,
+    pilot: bool = False,
+    dry_run: bool = False,
+    yes: bool = False,
+    step: str | None = None,
+    n_tasks: int | None = None,
+    variant: str | None = None,
 ) -> list[str]:
     """CLI arguments for a UI action. `yes` is passed only after the user confirmed a paid run."""
     if command == "smoke":
@@ -126,6 +133,8 @@ def pipeline_args(
         raise ValueError(f"unknown command {command!r}")
     if pilot and command != "smoke":
         args.append("--pilot")
+    if variant:
+        args += ["--variant", variant]
     if dry_run:
         args.append("--dry-run")
     if yes:

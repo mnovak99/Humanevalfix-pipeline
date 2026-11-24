@@ -69,3 +69,17 @@ models:
     max_tokens: 4000
     params: {thinking_config: {thinking_level: low}}
     price_per_mtok: {input: 0.30, output: 2.50}
+
+# Named model-settings variants for follow-up runs: `--variant NAME` (CLI) or the
+# "Model settings" choice in the web UI. A variant replaces `params` of the models it
+# lists; tasks and prompts are shared, outputs get the suffix _NAME
+# (e.g. outputs/results_pilot_noreason.csv), so earlier results are never overwritten.
+variants:
+  noreason:
+    description: "Reasoning off: Claude thinking disabled (effort low), GPT reasoning effort none"
+    models:
+      claude-haiku-5-5:
+        # Haiku 5.5 accepts thinking {type: disabled} at effort low/medium/high (400 at xhigh/max).
+        params: {thinking: {type: disabled}, output_config: {effort: low}}
+      gpt-6-luna:
+        params: {reasoning: {effort: none}}

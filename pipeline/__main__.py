@@ -8,7 +8,7 @@ import logging
 import sys
 from collections.abc import Callable
 
-from pipeline.config import MissingApiKey, RunContext, load_config, load_env
+from pipeline.config import MissingApiKey, RunContext, UnknownVariant, apply_variant, load_config, load_env
 from pipeline.dataset import DatasetError
 from pipeline.s02_build_prompts import InvariantError, TranslationCheckError
 from pipeline.s03_run_models import LiveRunRefused
@@ -20,6 +20,7 @@ PipelineError = (
     InvariantError,
     LiveRunRefused,
     MissingApiKey,
+    UnknownVariant,
     FileNotFoundError,
 )
 
@@ -76,11 +77,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pilot", action="store_true", help="use pilot_n_tasks; writes *_pilot files")
     run.add_argument("--dry-run", action="store_true", help="fake provider, no API calls; writes *_dry files")
     run.add_argument("--yes", action="store_true", help="skip the cost confirmation for live runs")
+    run.add_argument("--variant", help="model-settings variant from config.yaml; writes *_<variant> outputs")
 
     smoke = sub.add_parser("smoke", help="EN-only check of the real APIs on a few tasks (writes *_smoke files)")
     smoke.add_argument("--n-tasks", type=int, default=2, help="number of tasks (default 2)")
     smoke.add_argument("--dry-run", action="store_true", help="fake provider, no API calls")
     smoke.add_argument("--yes", action="store_true", help="skip the cost confirmation")
+    smoke.add_argument("--variant", help="model-settings variant from config.yaml")
 
     ui = sub.add_parser("ui", help="open the web UI (local only, http://127.0.0.1:8501)")
     ui.add_argument("--port", type=int, default=8501)
@@ -106,13 +109,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "smoke":
             from pipeline.smoke import run_smoke
 
-            run_smoke(config, args.n_tasks, yes=args.yes, dry_run=args.dry_run)
+            run_smoke(config, args.n_tasks, yes=args.yes, dry_run=args.dry_run, variant=args.variant)
             return 0
 
-        ctx = RunContext(config=config, pilot=args.pilot, dry_run=args.dry_run, yes=args.yes)
+        ctx = RunContext(
+            config=apply_variant(config, args.variant),
+            pilot=args.pilot,
+            dry_run=args.dry_run,
+            yes=args.yes,
+            variant=args.variant,
+        )
+        if ctx.variant:
+            log.info("variant %r: %s", ctx.variant, config.variants[ctx.variant].description)
         steps = sorted(STEPS) if args.all else [args.step]
         for step in steps:
-            log.info("=== step %s (pilot=%s, dry_run=%s) ===", step, ctx.pilot, ctx.dry_run)
+            log.info("=== step %s (pilot=%s, dry_run=%s, variant=%s) ===", step, ctx.pilot, ctx.dry_run, ctx.variant)
             _step_fn(step)(ctx)
     except NotImplementedError as exc:
         log.error("%s", exc)

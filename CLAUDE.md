@@ -51,6 +51,7 @@ Everything tunable lives here, nothing hardcoded in modules: `seed` (42), `n_tas
   * CS: `Dal jsem AI toto zadání, ale výsledek nějak nefunguje. Můžeš to prosím opravit?` ⏎⏎ `Použité zadání:` ⏎ `{docstring_translated}` ⏎⏎ `Kód:` ⏎ `{declaration}` ⏎ `{buggy_solution}` ⏎⏎ `Vrať celou opravenou funkci v jednom bloku kódu v Pythonu.`
   * Every field is inserted with trailing newlines removed (`rstrip("\n")`), nothing else changed, so the template alone sets the spacing (exactly one blank line between sections). The template supplies the line break between `declaration` and `buggy_solution`; step 02 checks that the code shown equals `declaration + buggy_solution` minus trailing newlines. Tests assert the exact Python/23 prompts and that no prompt has `"\n\n\n"` outside the code (25 declarations have PEP 8 blank lines inside, which are task code and stay).
 * Models: `claude-haiku-5-5` (anthropic) and `gpt-6-luna` (openai) enabled, `gemini-3.5-flash-lite` disabled. Effort is `low` for every model (`params` passthrough). Never send `temperature`, `top_p` or `top_k`.
+* `variants`: named `params` overrides for follow-up runs (`--variant NAME`, UI "Model settings"); outputs get the suffix `_NAME`, tasks and prompts are shared. `noreason`: Haiku `thinking: {type: disabled}` + effort `low` (Haiku 5.5 allows disabled thinking only at effort low/medium/high), GPT `reasoning: {effort: none}`. Never overwrite earlier run outputs: a new configuration gets a new variant.
 
 API keys come from `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) via `python-dotenv`. Never print, log or commit keys. `.env.example` has empty values.
 
@@ -116,7 +117,7 @@ uv run python -m pipeline smoke [--n-tasks N] [--dry-run]
 uv run python -m pipeline ui          # or double-click start_ui.cmd
 ```
 
-`--pilot`, `--dry-run` and smoke runs write to separate files (suffixes `_pilot`, `_dry`, `_smoke`) so test runs never mix with real data. The web UI (127.0.0.1 only) runs the same CLI in a background process and requires an explicit confirmation for paid runs.
+`--pilot`, `--dry-run`, `--variant NAME` and smoke runs write to separate files (suffixes `_pilot`, `_smoke`, `_NAME`, `_dry`) so test runs never mix with real data. The web UI (127.0.0.1 only) runs the same CLI in a background process and requires an explicit confirmation for paid runs.
 
 ## Code style
 

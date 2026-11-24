@@ -252,6 +252,30 @@ connection errors/timeouts and HTTP 408/409/429/5xx/529; everything else is a
 failed record. `output_tokens` includes thinking/reasoning tokens. Model-side
 metadata (stop reason / status, refusal details, request id) goes to `raw_meta`.
 
+### Model-settings variants
+
+`config.yaml` → `variants` defines named overrides of the models' `params` for follow-up
+runs. Select one with `--variant NAME` (`run` and `smoke`) or the "Model settings" choice in
+the web UI. Tasks and prompts are shared; outputs get the suffix `_NAME`
+(`outputs/responses_pilot_noreason.jsonl`, `results_pilot_noreason.csv`, …), so earlier
+results are never overwritten. Each response record stores its exact `settings`.
+
+| Variant | claude-haiku-5-5 | gpt-6-luna |
+|---------|------------------|------------|
+| default | `output_config: {effort: low}` (adaptive thinking on) | `reasoning: {effort: low}` |
+| `noreason` | `thinking: {type: disabled}`, `output_config: {effort: low}` | `reasoning: {effort: none}` |
+
+Why `noreason`: the first pilot (tag `pilot-1-2026-11-24`, default settings) hit a ceiling,
+98–100 % pass in both languages. Per the Anthropic docs, Claude Haiku 5.5 accepts
+`thinking: {type: "disabled"}` at effort `low`/`medium`/`high` (400 at `xhigh`/`max`), so
+thinking is fully off. OpenAI's SDK lists `none` as a reasoning effort, but not every
+reasoning model supports every value; a request rejected by the API becomes a failed record.
+
+```powershell
+uv run python -m pipeline smoke --variant noreason        # 4 calls, check the settings work
+uv run python -m pipeline run --all --pilot --variant noreason
+```
+
 ### Smoke test (real APIs, English only)
 
 ```powershell

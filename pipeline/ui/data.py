@@ -136,10 +136,11 @@ def dataset_status(cfg: Config, pilot: bool) -> DatasetStatus:
     return st
 
 
-def smoke_estimate(cfg: Config, n_tasks: int) -> CostEstimate:
+def smoke_estimate(cfg: Config, n_tasks: int, variant: str | None = None) -> CostEstimate:
+    """`cfg` must already have the variant applied."""
     from pipeline.smoke import build_smoke_prompts
 
-    ctx = RunContext(replace(cfg, runs_per_prompt=1), smoke=True)
+    ctx = RunContext(replace(cfg, runs_per_prompt=1), smoke=True, variant=variant)
     tasks = read_json(ctx.tasks_path)["tasks"][:n_tasks] if ctx.tasks_path.exists() else []
     prompts = [p.to_dict() for p in build_smoke_prompts(tasks, cfg)]
     jobs = plan_jobs(prompts, ctx.config.enabled_models, 1, read_jsonl(ctx.responses_path))

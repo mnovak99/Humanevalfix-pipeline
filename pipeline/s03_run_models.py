@@ -124,7 +124,11 @@ def confirm(question: str, assume_yes: bool) -> bool:
     if not sys.stdin.isatty():
         log.error("no interactive terminal for confirmation; rerun with --yes")
         return False
-    return input(f"{question} [y/N] ").strip().lower() in {"y", "yes"}
+    try:
+        return input(f"{question} [y/N] ").strip().lower() in {"y", "yes"}
+    except EOFError:  # e.g. stdin is the NUL device, which Windows reports as a terminal
+        log.error("no answer to the confirmation; rerun with --yes")
+        return False
 
 
 def call_with_retries(

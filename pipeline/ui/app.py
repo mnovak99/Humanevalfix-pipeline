@@ -10,7 +10,7 @@ from dataclasses import replace
 import pandas as pd
 import streamlit as st
 
-from pipeline.config import ROOT, RunContext, load_config, load_env
+from pipeline.config import ROOT, RunContext, apply_variant, load_config, load_env
 from pipeline.ui.data import (
     call_progress,
     cost_estimate,
@@ -49,7 +49,7 @@ def load_cfg():
 
 
 runner = get_runner()
-cfg = load_cfg()
+base_cfg = load_cfg()
 
 # --------------------------------------------------------------------------- sidebar
 with st.sidebar:
@@ -57,11 +57,20 @@ with st.sidebar:
     mode = st.radio(
         "Task set",
         ["Pilot", "Full"],
-        format_func=lambda m: f"Pilot ({cfg.pilot_n_tasks} tasks)" if m == "Pilot" else f"Full ({cfg.n_tasks} tasks)",
+        format_func=lambda m: f"Pilot ({base_cfg.pilot_n_tasks} tasks)" if m == "Pilot" else f"Full ({base_cfg.n_tasks} tasks)",
     )
+    variant = st.selectbox(
+        "Model settings",
+        [None, *base_cfg.variants],
+        format_func=lambda v: "default (config.yaml models)" if v is None else f"variant: {v}",
+        help="Variants are defined in config.yaml and write their own output files (suffix _<variant>).",
+    )
+    if variant:
+        st.caption(base_cfg.variants[variant].description)
     dry_run = st.toggle("Dry run (fake model, no cost)", value=True)
     pilot = mode == "Pilot"
-    ctx = RunContext(cfg, pilot=pilot, dry_run=dry_run)
+    cfg = apply_variant(base_cfg, variant)
+    ctx = RunContext(cfg, pilot=pilot, dry_run=dry_run, variant=variant)
 
     st.caption(f"Files: `*{ctx.results_path.stem.removeprefix('results') or ' (main)'}`")
     st.divider()
@@ -141,7 +150,7 @@ with run_tab:
     problems: list[str] = []
     confirmed = True
     if paid:
-        est = smoke_estimate(cfg, n_smoke) if action == "smoke" else cost_estimate(ctx)
+        est = smoke_estimate(cfg, n_smoke, variant) if action == "smoke" else cost_estimate(ctx)
         st.markdown(f"#### Paid run: {est.calls} API calls, estimated **${est.total:.4f}**")
         if est.calls:
             st.dataframe(
@@ -165,7 +174,9 @@ with run_tab:
         st.error(p)
 
     if st.button("Start", type="primary", disabled=busy or bool(problems) or not confirmed):
-        args = pipeline_args(action, pilot=pilot, dry_run=dry_run, yes=paid and confirmed, step=step, n_tasks=n_smoke)
+        args = pipeline_args(
+            action, pilot=pilot, dry_run=dry_run, yes=paid and confirmed, step=step, n_tasks=n_smoke, variant=variant
+        )
         runner.start(args)
         st.rerun()
 
@@ -232,7 +243,11 @@ with dataset_tab:
 # --------------------------------------------------------------------------- results
 with results_tab:
     source = st.radio("Results of", ["selected task set", "smoke test"], horizontal=True)
-    rctx = RunContext(replace(cfg, runs_per_prompt=1), smoke=True, dry_run=dry_run) if source == "smoke test" else ctx
+    rctx = (
+        RunContext(replace(cfg, runs_per_prompt=1), smoke=True, dry_run=dry_run, variant=variant)
+        if source == "smoke test"
+        else ctx
+    )
     df = load_results(rctx)
     if df is None:
         st.info(f"No `{rctx.results_path.name}` yet. Run the pipeline first.")

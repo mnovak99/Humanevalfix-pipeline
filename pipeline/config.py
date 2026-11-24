@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,15 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class Variant:
+    """Named model-settings override for a follow-up run (`--variant NAME`)."""
+
+    name: str
+    description: str
+    params: dict[str, dict[str, Any]]  # model name -> replacement `params`
+
+
+@dataclass(frozen=True)
 class Config:
     dataset_path: Path
     text_fields: dict[str, str]  # language -> dataset field with the task description
@@ -52,10 +62,26 @@ class Config:
     runs_per_prompt: int
     exec_timeout_s: float
     models: list[ModelConfig]
+    variants: dict[str, Variant] = field(default_factory=dict)
 
     @property
     def enabled_models(self) -> list[ModelConfig]:
         return [m for m in self.models if m.enabled]
+
+
+class UnknownVariant(ValueError):
+    pass
+
+
+def apply_variant(cfg: Config, name: str | None) -> Config:
+    """Config with the variant's `params` replacing those of the listed models."""
+    if name is None:
+        return cfg
+    if name not in cfg.variants:
+        raise UnknownVariant(f"unknown variant {name!r}; defined in config.yaml: {sorted(cfg.variants)}")
+    variant = cfg.variants[name]
+    models = [replace(m, params=dict(variant.params[m.name])) if m.name in variant.params else m for m in cfg.models]
+    return replace(cfg, models=models)
 
 
 def _parse_model(raw: dict[str, Any]) -> ModelConfig:
@@ -89,7 +115,22 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         runs_per_prompt=int(raw["runs_per_prompt"]),
         exec_timeout_s=float(raw["exec_timeout_s"]),
         models=[_parse_model(m) for m in raw["models"]],
+        variants={
+            str(name): Variant(
+                name=str(name),
+                description=str(v.get("description", "")),
+                params={str(model): dict(spec.get("params") or {}) for model, spec in (v.get("models") or {}).items()},
+            )
+            for name, v in (raw.get("variants") or {}).items()
+        },
     )
+    model_names = {m.name for m in cfg.models}
+    for v in cfg.variants.values():
+        if not re.fullmatch(r"[a-z0-9]+", v.name):
+            raise ValueError(f"variant name {v.name!r} must be lowercase letters/digits (used in file names)")
+        unknown = set(v.params) - model_names
+        if unknown:
+            raise ValueError(f"variant {v.name!r} refers to unknown models {sorted(unknown)}")
     if cfg.pilot_n_tasks > cfg.n_tasks:
         raise ValueError("pilot_n_tasks must not exceed n_tasks (pilot must be a subset)")
     if "en" not in cfg.languages:
@@ -122,7 +163,10 @@ def get_api_key(provider: str) -> str:
 class RunContext:
     """Run mode plus the file paths derived from it.
 
-    --pilot, --dry-run and smoke mode add suffixes so test runs never overwrite real data.
+    --pilot, --dry-run, smoke mode and --variant add suffixes so test runs never overwrite
+    real data. A variant changes only model settings, so it suffixes the output files but
+    shares tasks and prompts (e.g. responses_pilot_noreason.jsonl, prompts_pilot.jsonl).
+    `config` must already have the variant applied (see apply_variant).
     """
 
     config: Config
@@ -130,17 +174,20 @@ class RunContext:
     dry_run: bool = False
     yes: bool = False
     smoke: bool = False  # EN-only API check; reads the full task set
+    variant: str | None = None
     root: Path = ROOT
 
     @property
     def n_tasks(self) -> int:
         return self.config.pilot_n_tasks if self.pilot else self.config.n_tasks
 
-    def _suffix(self, include_dry: bool) -> str:
+    def _suffix(self, outputs: bool) -> str:
         s = "_pilot" if self.pilot else ""
         if self.smoke:
             s += "_smoke"
-        if include_dry and self.dry_run:
+        if outputs and self.variant:
+            s += f"_{self.variant}"
+        if outputs and self.dry_run:
             s += "_dry"
         return s
 
