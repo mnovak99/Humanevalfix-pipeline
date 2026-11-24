@@ -85,19 +85,29 @@ def _has_function(tree: ast.Module, name: str) -> bool:
     return any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name for n in tree.body)
 
 
+def _defines(code: str, entry_point: str) -> bool:
+    try:
+        return _has_function(ast.parse(code), entry_point)
+    except SyntaxError:
+        return False
+
+
 def extract(text: str | None, entry_point: str) -> Extraction:
     if text is None or not text.strip():
         return Extraction(EMPTY_RESPONSE, None, 0, "none")
     blocks = find_blocks(text)
     python_blocks = [code for tag, code in blocks if tag in _PYTHON_TAGS]
     if python_blocks:
-        code, source = python_blocks[-1], "python_block"
+        candidates, source = python_blocks, "python_block"
     elif blocks:
-        code, source = blocks[-1][1], "any_block"
+        candidates, source = [code for _, code in blocks], "any_block"
     else:
-        code, source = text, "whole_text"
+        candidates, source = [text], "whole_text"
+    candidates = [c.strip("\n") + "\n" for c in candidates]
 
-    code = code.strip("\n") + "\n"
+    # Last block that defines the function; a later block with usage examples
+    # (`>>> f(1)`) or test calls must not hide the fix.
+    code = next((c for c in reversed(candidates) if _defines(c, entry_point)), candidates[-1])
     try:
         tree = ast.parse(code)
     except SyntaxError:

@@ -11,7 +11,7 @@ Python/3,operator misuse,en,claude-haiku-5-5,3,ok,passed,1,1,0,281,188,0,1.35752
 Python/3,operator misuse,en,gpt-6-luna,1,ok,passed,1,1,0,199,167,108,2.075795100070536
 Python/3,operator misuse,en,gpt-6-luna,2,ok,passed,1,1,0,199,91,32,1.6643995000049472
 Python/3,operator misuse,en,gpt-6-luna,3,ok,passed,1,1,0,199,96,37,1.512449299916625
-Python/13,variable misuse,cs,claude-haiku-5-5,1,syntax_error,skipped,0,,,253,324,79,2.00035379990004
+Python/13,variable misuse,cs,claude-haiku-5-5,1,ok,passed,1,0,0,253,324,79,2.00035379990004
 Python/13,variable misuse,cs,claude-haiku-5-5,2,ok,passed,1,0,0,253,242,0,1.609638899913989
 Python/13,variable misuse,cs,claude-haiku-5-5,3,ok,passed,1,0,0,253,298,44,1.7778359999647364
 Python/13,variable misuse,cs,gpt-6-luna,1,ok,passed,1,0,0,180,117,61,1.4755703000118956

@@ -46,6 +46,30 @@ def test_last_python_block_wins() -> None:
     assert ex.status == OK and ex.code == FIXED and ex.n_blocks == 3
 
 
+def test_later_doctest_block_does_not_hide_the_fix() -> None:
+    text = f"Fixed:\n```python\n{FIXED}```\nUsage:\n```python\n>>> add(1, 2)\n3\n```"
+    ex = extract(text, "add")
+    assert (ex.status, ex.source, ex.code) == (OK, "python_block", FIXED)
+
+
+def test_later_block_without_the_function_does_not_hide_the_fix() -> None:
+    text = f"```python\n{FIXED}```\nTry it:\n```python\nprint(add(1, 2))\n```"
+    ex = extract(text, "add")
+    assert ex.status == OK and ex.code == FIXED
+
+
+def test_last_block_defining_the_function_wins() -> None:
+    other = "def add(a, b):\n    return b + a\n"
+    text = f"```python\n{FIXED}```\n```python\n{other}```\n```python\n>>> add(1, 2)\n```"
+    assert extract(text, "add").code == other
+
+
+def test_no_block_defines_function_reports_last_block() -> None:
+    bad = "```python\ndef add(a, b:\n    return a\n```\n```python\n>>> add(1, 2)\n```"
+    ex = extract(bad, "add")
+    assert ex.status == SYNTAX_ERROR and ex.code.startswith(">>>")
+
+
 def test_python_block_preferred_over_later_untagged_block() -> None:
     text = f"```python\n{FIXED}```\nOutput:\n```\n3\n```"
     ex = extract(text, "add")

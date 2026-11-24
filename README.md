@@ -292,10 +292,14 @@ they never mix with research data.
 
 ## Extraction (step 04)
 
-Code = last ` ```python ` (or `py`) block, else the last fenced block of any
-kind, else the whole text; an unclosed final fence (truncated output) counts as
-a block. The code must `ast.parse` and define a top-level function named
-`entry_point`. Statuses: `ok`, `no_code_block` (whole text used and it parsed),
+Code = the last ` ```python ` (or `py`) block that parses and defines a top-level
+function named `entry_point`. If there are no python blocks, fenced blocks of any
+kind are used the same way, and if there are no fenced blocks, the whole text.
+An unclosed final fence (truncated output) counts as a block. If no candidate
+defines the function, the last one is reported with its status. This means a
+later block with only usage examples (`>>> f(1)`) or test calls does not hide
+the fix. In the noreason full run, Haiku did this in 8 of 600 answers, 6 of them
+in Czech. Statuses: `ok`, `no_code_block` (whole text used and it parsed),
 `syntax_error`, `function_missing`, `empty_response`, and `api_error` (the call
 itself failed). Usable for execution: `ok`, `no_code_block`.
 

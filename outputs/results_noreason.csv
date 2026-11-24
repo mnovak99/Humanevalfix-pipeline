@@ -271,7 +271,7 @@ Python/34,missing logic,cs,gpt-6-luna,2,ok,passed,1,0,0,159,20,0,1.1723956000059
 Python/34,missing logic,cs,gpt-6-luna,3,ok,passed,1,0,0,159,20,0,1.1124080000445247
 Python/34,missing logic,en,claude-haiku-5-5,1,ok,passed,1,0,0,171,95,0,0.9139798000687733
 Python/34,missing logic,en,claude-haiku-5-5,2,ok,passed,1,0,0,171,109,0,0.9496660000877455
-Python/34,missing logic,en,claude-haiku-5-5,3,syntax_error,skipped,0,,,171,119,0,1.029915599967353
+Python/34,missing logic,en,claude-haiku-5-5,3,ok,passed,1,0,0,171,119,0,1.029915599967353
 Python/34,missing logic,en,gpt-6-luna,1,ok,passed,1,0,0,125,20,0,1.2147267999826
 Python/34,missing logic,en,gpt-6-luna,2,ok,passed,1,0,0,125,20,0,0.8414844999788329
 Python/34,missing logic,en,gpt-6-luna,3,ok,passed,1,0,0,125,20,0,0.7982017999747768
@@ -391,7 +391,7 @@ Python/50,variable misuse,cs,gpt-6-luna,2,ok,passed,1,0,0,209,51,0,1.99775139999
 Python/50,variable misuse,cs,gpt-6-luna,3,ok,passed,1,0,0,209,51,0,2.212561500025913
 Python/50,variable misuse,en,claude-haiku-5-5,1,ok,passed,1,1,0,262,336,0,1.755803299951367
 Python/50,variable misuse,en,claude-haiku-5-5,2,ok,passed,1,1,0,262,397,0,1.9394440000178292
-Python/50,variable misuse,en,claude-haiku-5-5,3,function_missing,skipped,0,,,262,334,0,1.8940270999446511
+Python/50,variable misuse,en,claude-haiku-5-5,3,ok,passed,1,1,0,262,334,0,1.8940270999446511
 Python/50,variable misuse,en,gpt-6-luna,1,ok,passed,1,0,0,170,50,0,2.0003017000854015
 Python/50,variable misuse,en,gpt-6-luna,2,ok,passed,1,0,0,170,50,0,1.8740441999398172
 Python/50,variable misuse,en,gpt-6-luna,3,ok,passed,1,0,0,170,50,0,2.059186000027694
@@ -719,9 +719,9 @@ Python/90,value misuse,en,claude-haiku-5-5,3,ok,passed,1,0,0,259,552,0,2.9737205
 Python/90,value misuse,en,gpt-6-luna,1,ok,passed,1,0,0,187,40,0,2.0754607999697328
 Python/90,value misuse,en,gpt-6-luna,2,ok,passed,1,0,0,187,40,0,1.7513609998859465
 Python/90,value misuse,en,gpt-6-luna,3,ok,passed,1,0,0,187,40,0,1.3860475999535993
-Python/91,value misuse,cs,claude-haiku-5-5,1,syntax_error,skipped,0,,,312,436,0,2.6091356000397354
-Python/91,value misuse,cs,claude-haiku-5-5,2,syntax_error,skipped,0,,,312,495,0,2.9296187999425456
-Python/91,value misuse,cs,claude-haiku-5-5,3,syntax_error,skipped,0,,,312,289,0,2.0995227999519557
+Python/91,value misuse,cs,claude-haiku-5-5,1,ok,passed,1,0,0,312,436,0,2.6091356000397354
+Python/91,value misuse,cs,claude-haiku-5-5,2,ok,passed,1,0,0,312,495,0,2.9296187999425456
+Python/91,value misuse,cs,claude-haiku-5-5,3,ok,passed,1,0,0,312,289,0,2.0995227999519557
 Python/91,value misuse,cs,gpt-6-luna,1,ok,failed,0,0,0,213,45,0,1.151331300032325
 Python/91,value misuse,cs,gpt-6-luna,2,ok,passed,1,0,0,213,63,0,1.7114093999844044
 Python/91,value misuse,cs,gpt-6-luna,3,ok,failed,0,0,0,213,45,0,1.7763971999520436
@@ -757,7 +757,7 @@ Python/98,value misuse,en,gpt-6-luna,2,ok,passed,1,1,0,153,54,0,1.05923900008201
 Python/98,value misuse,en,gpt-6-luna,3,ok,passed,1,1,0,153,54,0,0.9683864000253379
 Python/99,function misuse,cs,claude-haiku-5-5,1,ok,passed,1,0,0,528,523,0,2.8767526000738144
 Python/99,function misuse,cs,claude-haiku-5-5,2,ok,passed,1,0,0,528,506,0,3.0904538999311626
-Python/99,function misuse,cs,claude-haiku-5-5,3,syntax_error,skipped,0,,,528,596,0,3.562157400068827
+Python/99,function misuse,cs,claude-haiku-5-5,3,ok,passed,1,0,0,528,596,0,3.562157400068827
 Python/99,function misuse,cs,gpt-6-luna,1,ok,passed,1,0,0,369,46,0,1.6317606000229716
 Python/99,function misuse,cs,gpt-6-luna,2,ok,passed,1,0,0,369,46,0,1.7832212999928743
 Python/99,function misuse,cs,gpt-6-luna,3,ok,passed,1,0,0,369,46,0,2.0962342999409884
@@ -864,8 +864,8 @@ Python/112,operator misuse,en,gpt-6-luna,1,ok,passed,1,0,0,233,41,0,7.3468236000
 Python/112,operator misuse,en,gpt-6-luna,2,ok,passed,1,0,0,233,41,0,7.5535904000280425
 Python/112,operator misuse,en,gpt-6-luna,3,ok,passed,1,0,0,233,41,0,7.204212500015274
 Python/116,variable misuse,cs,claude-haiku-5-5,1,ok,passed,1,0,0,394,738,0,4.147712100064382
-Python/116,variable misuse,cs,claude-haiku-5-5,2,syntax_error,skipped,0,,,394,666,0,3.5048334000166506
-Python/116,variable misuse,cs,claude-haiku-5-5,3,syntax_error,skipped,0,,,394,674,0,3.662649300065823
+Python/116,variable misuse,cs,claude-haiku-5-5,2,ok,passed,1,0,0,394,666,0,3.5048334000166506
+Python/116,variable misuse,cs,claude-haiku-5-5,3,ok,passed,1,0,0,394,674,0,3.662649300065823
 Python/116,variable misuse,cs,gpt-6-luna,1,ok,passed,1,0,0,282,32,0,5.327784099965356
 Python/116,variable misuse,cs,gpt-6-luna,2,ok,passed,1,0,0,282,29,0,5.996409500017762
 Python/116,variable misuse,cs,gpt-6-luna,3,ok,passed,1,0,0,282,32,0,5.948649700032547

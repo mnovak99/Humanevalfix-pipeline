@@ -91,7 +91,7 @@ Each step reads the previous step's file and writes its own. Every step is idemp
 
 ### s04_extract
 
-* Code = last ```python block, else any fenced block, else whole text; `ast.parse` and find the top-level function `entry_point`.
+* Code = last ```python block that parses and defines the top-level function `entry_point` (a later block with `>>>` usage examples must not hide the fix); else the same over any fenced blocks; else whole text. If no candidate defines it, the last candidate is reported with its status.
 * Status: `ok`, `no_code_block`, `syntax_error`, `function_missing`, `empty_response`, `api_error`.
 * For usable code compare the extracted function after `ast.parse` → `ast.unparse` normalization with docstrings removed: `exact_match_canonical` (vs. `declaration + canonical_solution`), `unchanged_from_buggy` (vs. `declaration + buggy_solution`).
 
