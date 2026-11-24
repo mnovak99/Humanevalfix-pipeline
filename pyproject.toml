@@ -18,6 +18,12 @@ dependencies = [
     "tqdm>=4.70.1",
 ]
 
+[tool.uv]
+# Use an installed, code-signed Python (python.org installer), never uv's own downloads:
+# Windows Smart App Control blocks unsigned interpreter files (e.g. _multiprocessing.pyd,
+# pyexpat.pyd from uv-managed CPython builds).
+python-preference = "only-system"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

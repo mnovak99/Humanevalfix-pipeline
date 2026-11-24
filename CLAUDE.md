@@ -11,8 +11,8 @@ My responsibility is the whole pipeline: dataset → prompts → model calls →
 
 ## Environment
 
-* Windows 11, PowerShell. No Docker. Windows Smart App Control is on: it blocks new, not-yet-reputable native DLLs (this is why `pydantic` is pinned to 2.12.5). Check that new compiled dependencies import before relying on them; never change Windows security settings.
-* Python 3.12 managed by `uv` (`uv add`, `uv run`). Commit `uv.lock`.
+* Windows 11, PowerShell. No Docker. Windows Smart App Control is on: it blocks unsigned, not-yet-reputable native code (this is why `pydantic` is pinned to 2.12.5). Check that new compiled dependencies import before relying on them; never change Windows security settings.
+* Python 3.12 from the python.org installer (code-signed, `%LOCALAPPDATA%\Programs\Python\Python312`), used through `uv` (`uv add`, `uv run`). `pyproject.toml` sets `[tool.uv] python-preference = "only-system"`: never let uv download its own CPython, whose unsigned `.pyd` files Smart App Control blocks. Commit `uv.lock`.
 * Git: commit after every change set. The GitHub remote `origin` exists; never push without my explicit OK. Never write 'co-authored' in any commit or PR.
 * Paths: always use `pathlib`. Read/write all text files as UTF-8 explicitly (Windows defaults to cp1250), with LF line endings (`pipeline/io.py`).
 

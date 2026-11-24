@@ -12,9 +12,14 @@ descriptions; step 02 checks both and stops otherwise.
 
 ## Setup
 
-Requires [uv](https://docs.astral.sh/uv/) (Python 3.12 is installed by uv).
+Requires [uv](https://docs.astral.sh/uv/) and an installed **Python 3.12 from
+python.org** (code-signed). uv is configured with `python-preference = "only-system"`
+and does not download its own interpreter: uv's managed CPython builds are unsigned,
+and Windows Smart App Control blocks their files (seen for `_multiprocessing.pyd` and
+`pyexpat.pyd`, which the web UI needs).
 
 ```powershell
+winget install --id Python.Python.3.12 -e --source winget --scope user
 uv sync
 Copy-Item .env.example .env   # then fill in API keys
 uv run pytest
@@ -306,5 +311,7 @@ the two comparison counts; no statistics.
 - [x] Final dataset (`data/humanevalpack_cs.jsonl`) with new prompt templates,
       translation checks and code-comparison columns; no paid calls made yet
 
-Note: `pydantic` is pinned to 2.12.5 because Windows Smart App Control blocks the
-newer `pydantic-core` DLL. Keep the pin unless the pipeline runs elsewhere (WSL/Linux).
+Notes on Windows Smart App Control (keep these unless the pipeline runs elsewhere, e.g.
+WSL/Linux): the interpreter is the signed python.org Python 3.12 (3.12.10), not a
+uv-managed build, and `pydantic` is pinned to 2.12.5 because the newer `pydantic-core`
+DLL was blocked.
