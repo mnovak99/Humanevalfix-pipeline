@@ -1,0 +1,536 @@
+#### 1. TASK
+===== bug_type
+value misuse
+===== entry_point
+is_nested
+===== instruction
+Write a Python function `is_nested(string)` to solve the following problem:
+Create a function that takes a string as input which contains only square brackets.
+The function should return True if and only if there is a valid subsequence of brackets
+where at least one bracket in the subsequence is nested.
+is_nested('[[]]') ➞ True
+is_nested('[]]]]]]][[[[[]') ➞ False
+is_nested('[][]') ➞ False
+is_nested('[]') ➞ False
+is_nested('[[][]]') ➞ True
+is_nested('[[]][[') ➞ True
+===== docstring_translated
+Napiš v Pythonu funkci `is_nested(string)`, která řeší následující problém:
+Vytvoř funkci, která přijímá jako vstup řetězec obsahující pouze hranaté závorky.
+Funkce by měla vrátit True pouze tehdy, když v řetězci existuje posloupnost závorek, ve které je alespoň jedna dvojice závorek vnořená.
+is_nested('[[]]') ➞ True
+is_nested('[]]]]]]][[[[[]') ➞ False
+is_nested('[][]') ➞ False
+is_nested('[]') ➞ False
+is_nested('[[][]]') ➞ True
+is_nested('[[]][[') ➞ True
+===== declaration
+def is_nested(string):
+
+===== buggy_solution
+    opening_bracket_index = []
+    closing_bracket_index = []
+    for i in range(len(string)):
+        if string[i] == '(':
+            opening_bracket_index.append(i)
+        else:
+            closing_bracket_index.append(i)
+    closing_bracket_index.reverse()
+    cnt = 0
+    i = 0
+    l = len(closing_bracket_index)
+    for idx in opening_bracket_index:
+        if i < l and idx < closing_bracket_index[i]:
+            cnt += 1
+            i += 1
+    return cnt >= 2
+
+    
+
+===== canonical_solution
+    opening_bracket_index = []
+    closing_bracket_index = []
+    for i in range(len(string)):
+        if string[i] == '[':
+            opening_bracket_index.append(i)
+        else:
+            closing_bracket_index.append(i)
+    closing_bracket_index.reverse()
+    cnt = 0
+    i = 0
+    l = len(closing_bracket_index)
+    for idx in opening_bracket_index:
+        if i < l and idx < closing_bracket_index[i]:
+            cnt += 1
+            i += 1
+    return cnt >= 2
+
+    
+
+===== test
+def check(is_nested):
+
+    # Check some simple cases
+    assert is_nested('[[]]') == True, "This prints if this assert fails 1 (good for debugging!)"
+    assert is_nested('[]]]]]]][[[[[]') == False
+    assert is_nested('[][]') == False
+    assert is_nested(('[]')) == False
+    assert is_nested('[[[[]]]]') == True
+    assert is_nested('[]]]]]]]]]]') == False
+    assert is_nested('[][][[]]') == True
+    assert is_nested('[[]') == False
+    assert is_nested('[]]') == False
+    assert is_nested('[[]][[') == True
+    assert is_nested('[[][]]') == True
+
+    # Check some edge cases that are easy to work out by hand.
+    assert is_nested('') == False, "This prints if this assert fails 2 (also good for debugging!)"
+    assert is_nested('[[[[[[[[') == False
+    assert is_nested(']]]]]]]]') == False
+
+check(is_nested)
+
+#### 2. SANITY CHECK (same executor/program as step 01)
+canonical: status=passed exc=None rc=0
+  stderr: (empty)
+buggy: status=failed exc=AssertionError rc=1
+  stderr:     assert is_nested('[[]]') == True, "This prints if this assert fails 1 (good for debugging!)" |            ^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError: This prints if this assert fails 1 (good for debugging!)
+
+#### 5. CANONICAL vs DOCSTRING EXAMPLES AND TEST ASSERTS
+14 test asserts, 6 docstring examples
+canonical test mismatches: none
+canonical docstring mismatches: none
+all 8191 bracket strings up to length 12: canonical != subsequence-'[[]]' rule on 0, canonical != depth>=2 rule on 1623
+
+#### 3/4/6. RECORDS (current responses of each pilot)
+
+================ PILOT 1 (effort low)  (responses_pilot.jsonl, preamble='\n    \n')
+
+--- Python/132::cs claude-haiku-5-5 run1: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    opening_count = 0
+    second_open_index = -1
+
+    # Najdeme index druhé otevírací hranaté závorky
+    for i, ch in enumerate(string):
+        if ch == '[':
+            opening_count += 1
+            if opening_count == 2:
+                second_open_index = i
+                break
+
+    # Pokud druhá '[' neexistuje, vnoření nemůže nastat
+    if second_open_index == -1:
+        return False
+
+    # Spočítáme zavírací závorky za druhou '['
+    closing_after = sum(1 for ch in string[second_open_index + 1:] if ch == ']')
+
+    # Vnoření existuje, pokud jsou za ní alespoň dvě zavírací závorky
+    return closing_after >= 2
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs claude-haiku-5-5 run2: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    pattern = "[[]]"
+    j = 0
+    for ch in string:
+        if j < len(pattern) and ch == pattern[j]:
+            j += 1
+    return j == len(pattern)
+
+
+# Kontrola na příkladech
+print(is_nested('[[]]'))             # True
+print(is_nested('[]]]]]]][[[[[]'))   # False
+print(is_nested('[][]'))             # False
+print(is_nested('[]'))               # False
+print(is_nested('[[][]]'))           # True
+print(is_nested('[[]][['))           # True
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs claude-haiku-5-5 run3: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    pattern = "[[]]"
+    p = 0  # index do vzoru, který aktuálně hledáme
+    for ch in string:
+        if p < len(pattern) and ch == pattern[p]:
+            p += 1
+            if p == len(pattern):
+                return True
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs gpt-6-luna run1: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    stack = []
+
+    for char in string:
+        if char == '[':
+            stack.append(False)  # Zda tato dvojice obsahuje uzavřenou vnořenou dvojici
+        elif char == ']' and stack:
+            contains_nested_pair = stack.pop()
+
+            if contains_nested_pair:
+                return True
+
+            if stack:
+                stack[-1] = True
+
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs gpt-6-luna run2: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+    max_depth = 0
+
+    for bracket in string:
+        if bracket == '[':
+            depth += 1
+            max_depth = max(max_depth, depth)
+        else:  # bracket == ']'
+            if depth == 0:
+                # Ignore unmatched closing brackets and start a fresh sequence.
+                max_depth = 0
+                continue
+
+            depth -= 1
+
+            if depth == 0:
+                if max_depth >= 2:
+                    return True
+                max_depth = 0
+
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs gpt-6-luna run3: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for char in string:
+        if char == '[':
+            depth += 1
+        elif char == ']':
+            if depth >= 2:
+                return True
+            if depth == 1:
+                depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en claude-haiku-5-5 run1: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    pattern = ['[', '[', ']', ']']
+    pos = 0
+    for ch in string:
+        if pos < len(pattern) and ch == pattern[pos]:
+            pos += 1
+    return pos == len(pattern)
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::en claude-haiku-5-5 run2: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    pattern = "[[]]"
+    j = 0
+    for ch in string:
+        if j < len(pattern) and ch == pattern[j]:
+            j += 1
+    return j == len(pattern)
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::en claude-haiku-5-5 run3: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    # Look for a subsequence "[[]]": two opening brackets followed by two closing brackets.
+    # Such a subsequence is a valid bracket sequence with nesting, and any valid
+    # nested subsequence must contain this pattern.
+    stage = 0  # how many pattern characters have been matched so far
+    targets = ['[', '[', ']', ']']
+    for ch in string:
+        if stage < 4 and ch == targets[stage]:
+            stage += 1
+    return stage == 4
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::en gpt-6-luna run1: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    openings = 0
+    closings_after_two_openings = 0
+
+    for bracket in string:
+        if bracket == "[":
+            openings = min(openings + 1, 2)
+        elif openings == 2:
+            closings_after_two_openings += 1
+            if closings_after_two_openings == 2:
+                return True
+
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::en gpt-6-luna run2: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    # Look for the subsequence "[[]]".
+    stage = 0
+    for char in string:
+        if stage == 0 and char == '[':
+            stage = 1
+        elif stage == 1 and char == '[':
+            stage = 2
+        elif stage == 2 and char == ']':
+            stage = 3
+        elif stage == 3 and char == ']':
+            return True
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::en gpt-6-luna run3: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=passed (rerun=passed) exact_canon=False unchanged=False
+def is_nested(string):
+    openings = 0
+    closings_after_two_openings = 0
+
+    for bracket in string:
+        if bracket == '[':
+            openings += 1
+        elif openings >= 2:
+            closings_after_two_openings += 1
+            if closings_after_two_openings >= 2:
+                return True
+
+    return False
+stderr last lines: (none)
+FAILING TEST ASSERTS: none
+FAILING DOCSTRING EXAMPLES: none
+
+================ PILOT noreason  (responses_pilot_noreason.jsonl, preamble='\n    \n')
+
+--- Python/132::cs claude-haiku-5-5 run1: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+    for ch in string:
+        if ch == '[':
+            depth += 1
+            if depth >= 2:
+                return True
+        elif ch == ']':
+            depth -= 1
+            if depth < 0:
+                depth = 0
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False", "'[[[[[[[[': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::cs claude-haiku-5-5 run2: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+    for ch in string:
+        if ch == '[':
+            depth += 1
+            if depth >= 2:
+                return True
+        elif ch == ']':
+            depth -= 1
+    return False
+stderr last lines:     assert is_nested('[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[[]': got True want False", "'[[[[[[[[': got True want False"]
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs claude-haiku-5-5 run3: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+    for char in string:
+        if char == '[':
+            depth += 1
+            if depth >= 2:
+                return True
+        elif char == ']':
+            depth -= 1
+    return False
+stderr last lines:     assert is_nested('[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[[]': got True want False", "'[[[[[[[[': got True want False"]
+FAILING DOCSTRING EXAMPLES: none
+
+--- Python/132::cs gpt-6-luna run1: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for bracket in string:
+        if bracket == '[':
+            depth += 1
+        elif bracket == ']' and depth > 0:
+            if depth >= 2:
+                return True
+            depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::cs gpt-6-luna run2: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for char in string:
+        if char == '[':
+            depth += 1
+        elif char == ']' and depth > 0:
+            if depth >= 2:
+                return True
+            depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::cs gpt-6-luna run3: api=ok prompt_hash=2264fb6c8d0d extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for char in string:
+        if char == '[':
+            depth += 1
+            if depth >= 2:
+                return True
+        elif char == ']':
+            depth = max(0, depth - 1)
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False", "'[[[[[[[[': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en claude-haiku-5-5 run1: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    stack = []
+    nested = False
+    for ch in string:
+        if ch == '[':
+            # If there is already an open bracket, this one is nested inside it
+            if stack:
+                nested = True
+            stack.append(ch)
+        elif ch == ']':
+            if stack:
+                stack.pop()
+                # A pair closed; check whether it was nested inside another pair
+                # is handled by the push-time check above
+    return nested
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False", "'[[[[[[[[': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en claude-haiku-5-5 run2: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    stack = []  # tracks unmatched opening brackets as indices
+    nested = False
+    for ch in string:
+        if ch == '[':
+            stack.append(ch)
+        elif ch == ']':
+            if stack:
+                # A valid pair closes; if another pair was still open,
+                # this pair is nested inside it.
+                stack.pop()
+                if stack:
+                    nested = True
+            # unmatched ']' is ignored, since it cannot form a valid subsequence
+    return nested
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en claude-haiku-5-5 run3: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    stack = []
+    for ch in string:
+        if ch == '[':
+            stack.append(ch)
+        elif ch == ']':
+            if stack:
+                stack.pop()
+                # A pair was closed while another '[' was still open,
+                # so this pair is nested inside an outer pair.
+                if stack:
+                    return True
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en gpt-6-luna run1: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for bracket in string:
+        if bracket == '[':
+            depth += 1
+        elif bracket == ']' and depth > 0:
+            if depth >= 2:
+                return True
+            depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en gpt-6-luna run2: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for bracket in string:
+        if bracket == '[':
+            depth += 1
+        elif bracket == ']' and depth > 0:
+            if depth >= 2:
+                return True
+            depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
+
+--- Python/132::en gpt-6-luna run3: api=ok prompt_hash=a986b754588b extraction=ok python_blocks=1 exec=failed (rerun=failed) exact_canon=False unchanged=False
+def is_nested(string):
+    depth = 0
+
+    for bracket in string:
+        if bracket == '[':
+            depth += 1
+        elif bracket == ']' and depth > 0:
+            if depth >= 2:
+                return True
+            depth -= 1
+
+    return False
+stderr last lines:     assert is_nested('[]]]]]]][[[[[]') == False |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | AssertionError
+FAILING TEST ASSERTS: ["'[]]]]]]][[[[[]': got True want False", "'[[]': got True want False"]
+FAILING DOCSTRING EXAMPLES: ["'[]]]]]]][[[[[]': got True want False"]
